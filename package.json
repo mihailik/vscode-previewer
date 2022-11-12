@@ -1,0 +1,31 @@
+{
+  "name": "web-previewer",
+  "displayName": "web-previewer",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.73.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:web-previewer.helloWorld"
+  ],
+  "browser": "./dist/web/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "web-previewer.helloWorld",
+        "title": "Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
+  },
+  "dependencies": {
+    "@types/vscode": "^1.73.0",
+    "@vscode/test-web": "^0.0.32"
+  }
+}
