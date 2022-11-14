@@ -10,22 +10,35 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.helloWorld"
+    "onCommand:web-previewer.asExtensionLocal",
+    "onCommand:web-previewer.activeDocument",
+    "onCommand:web-previewer.activeDocumentAsHtml"
   ],
   "browser": "./index.js",
   "contributes": {
     "commands": [
       {
-        "command": "web-previewer.helloWorld",
-        "title": "Hello World"
+        "command": "web-previewer.asExtensionLocal",
+        "title": "Preview Extension Local"
+      },
+      {
+        "command": "web-previewer.activeDocument",
+        "title": "Preview Active Document"
+      },
+      {
+        "command": "web-previewer.activeDocumentAsHtml",
+        "title": "Preview Active HTML"
       }
     ]
   },
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
   },
-  "dependencies": {
+  "devDependencies": {
     "@types/vscode": "^1.73.0",
     "@vscode/test-web": "^0.0.32"
+  },
+  "dependencies": {
+    "typescript": "^4.8.4"
   }
 }
