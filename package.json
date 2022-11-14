@@ -10,51 +10,27 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.helloWorld",
-    "onView:calicoColors.colorsView",
-    "onCommand:calicoColors.addColor",
-    "onCommand:calicoColors.clearColors"
+    "onCommand:web-previewer.asExtensionLocal",
+    "onCommand:web-previewer.activeDocument",
+    "onCommand:web-previewer.activeDocumentAsHtml"
   ],
   "browser": "./index.js",
-
   "contributes": {
-    "views": {
-      "explorer": [
-        {
-          "type": "webview",
-          "id": "calicoColors.colorsView",
-          "name": "Calico Colors"
-        }
-      ]
-    },
     "commands": [
       {
-        "command": "web-previewer.helloWorld",
-        "title": "Hello World"
+        "command": "web-previewer.asExtensionLocal",
+        "title": "Preview Extension Local"
       },
       {
-        "command": "calicoColors.addColor",
-        "category": "Calico Colors",
-        "title": "Add Color"
+        "command": "web-previewer.activeDocument",
+        "title": "Preview Active Document"
       },
       {
-        "command": "calicoColors.clearColors",
-        "category": "Calico Colors",
-        "title": "Clear Colors",
-        "icon": "$(clear-all)"
+        "command": "web-previewer.activeDocumentAsHtml",
+        "title": "Preview Active HTML"
       }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "calicoColors.clearColors",
-          "group": "navigation",
-          "when": "view == calicoColors.colorsView"
-        }
-      ]
-    }
+    ]
   },
-
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
   },

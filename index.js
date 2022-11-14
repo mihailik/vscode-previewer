@@ -9,7 +9,33 @@ module.exports = { activate };
  */
 function activate(context) {
 
-  let disposable = vscode.commands.registerCommand('web-previewer.helloWorld', () => {
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.asExtensionLocal',
+      () => showWebviewImg(vscode.Uri.joinPath(context.extensionUri, 'cat.gif'))
+    ));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.activeDocument',
+      () => showWebviewImg(vscode.window.activeTextEditor?.document.uri)
+    ));
+  
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.activeDocumentAsHtml',
+      () => {
+        if (!vscode.window.activeTextEditor) throw new Error('No document selected.');
+
+        const wholeText = vscode.window.activeTextEditor.document.getText();
+        showWebviewHtml(vscode.window.activeTextEditor.document.uri, wholeText);
+      }
+    ));
+
+  /**
+   * @param {import('vscode').Uri | undefined} uri
+   */
+  function showWebviewImg(uri) {
     const panel = vscode.window.createWebviewPanel(
       'file preview',
       'HTML FILE PREVIEW',
@@ -17,21 +43,40 @@ function activate(context) {
       { enableScripts: true }
     );
 
-    const extensionUri_asWebviewUri = panel.webview.asWebviewUri(context.extensionUri);
-
-    const document_uri_asWebviewUri = !vscode.window.activeTextEditor?.document.uri ? undefined :
-      panel.webview.asWebviewUri(vscode.window.activeTextEditor?.document.uri);
+    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
 
     panel.webview.html = `
-    EXTENSION link:
-      <div>${extensionUri_asWebviewUri}/small-html.html</div>
-      <object data="${extensionUri_asWebviewUri}/small-html.html"></object>
-      <br><br>
-
-    ACTIVE DOCUMENT link:
-      <div>${document_uri_asWebviewUri}</div>
-      <object data="${document_uri_asWebviewUri}"></object>
+    <div>${resolvedUri}</div>
+    <pre>${JSON.stringify(resolvedUri, null, 2)}</pre>
+    IMG: <img src="${resolvedUri}"> <br>
+    IFRAME: <iframe src="${resolvedUri}"><iframe> <br>
+    <br><br>
     `;
-  });
-  context.subscriptions.push(disposable);
+  }
+
+  /**
+   * @param {import('vscode').Uri | undefined} uri
+   * @param {string} html
+   */
+  function showWebviewHtml(uri, html) {
+    const panel = vscode.window.createWebviewPanel(
+      'file preview',
+      'HTML FILE PREVIEW',
+      vscode.ViewColumn.One,
+      { enableScripts: true }
+    );
+    
+    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
+    const resolvedUriBase = resolvedUri && vscode.Uri.joinPath(resolvedUri, '..');
+
+    const injectBaseHref = '<base href="' + resolvedUriBase + '">';
+    let htmlInjectBase =
+      html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectBaseHref);
+    if (htmlInjectBase === html)
+      htmlInjectBase = injectBaseHref + html;
+
+
+    panel.webview.html = htmlInjectBase;
+  }
+
 }
