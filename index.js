@@ -1,82 +1,94 @@
 // @ts-check
 
-const vscode = require('vscode');
-
-module.exports = { activate };
+module.exports.activate = activate;
 
 /**
  * @param {import('vscode').ExtensionContext} context 
  */
 function activate(context) {
+  const vscode = require('vscode');
+  const webPreviewerStr = 'web-previewer';
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'web-previewer.asExtensionLocal',
-      () => showWebviewImg(vscode.Uri.joinPath(context.extensionUri, 'cat.gif'))
-    ));
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'web-previewer.activeDocument',
-      () => showWebviewImg(vscode.window.activeTextEditor?.document.uri)
-    ));
-  
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'web-previewer.activeDocumentAsHtml',
+      webPreviewerStr + '.activeDocumentAsHtml',
       () => {
-        if (!vscode.window.activeTextEditor) throw new Error('No document selected.');
+        const editor = /** @type {import('vscode').TextEditor}*/(vscode.window.activeTextEditor);
+        if (!editor) throw new Error('No document selected.');
 
-        const wholeText = vscode.window.activeTextEditor.document.getText();
-        showWebviewHtml(vscode.window.activeTextEditor.document.uri, wholeText);
+        const html = editor.document.getText();
+
+        const panel = vscode.window.createWebviewPanel(
+          webPreviewerStr + '-view',
+          'Loading...' + editor.document.fileName,
+          vscode.ViewColumn.One,
+          { enableScripts: true, retainContextWhenHidden: true }
+        );
+
+        const resolvedUri =
+          //editor.document.uri.scheme === 'file' ? editor.document.uri : // when run from actual shell
+            panel.webview.asWebviewUri(editor.document.uri); // when run from VSCode Web
+        const resolvedUriBase =
+          vscode.Uri.joinPath(resolvedUri, '..');
+
+        const injectCustom = '<base href="' + resolvedUriBase + '"><' + 'script' + '>(' + embeddedCode + ')()</' + 'script' + '>';
+        let htmlInjectBase = html.replace(/<head[^>]*>/, str => str + injectCustom);
+        if (htmlInjectBase === html)
+          htmlInjectBase = html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectCustom);
+        if (htmlInjectBase === html)
+          htmlInjectBase = injectCustom + html;
+
+        panel.webview.onDidReceiveMessage(handleWebViewMessage);
+
+        panel.webview.html = htmlInjectBase;
+
+        function handleWebViewMessage(msg) {
+          if ('alert' in msg) {
+            vscode.window.showInformationMessage(msg.alert);
+          }
+
+          if ('title' in msg) {
+            panel.title = msg.title || editor.document.fileName;
+          }
+        }
       }
     ));
 
-  /**
-   * @param {import('vscode').Uri | undefined} uri
-   */
-  function showWebviewImg(uri) {
-    const panel = vscode.window.createWebviewPanel(
-      'file preview',
-      'HTML FILE PREVIEW',
-      vscode.ViewColumn.One,
-      { enableScripts: true }
-    );
+  const embeddedCode = (() => {
+    return function () {
+      const vscode =
+        // @ts-ignore
+        acquireVsCodeApi();
 
-    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
+      function alert(str) {
+        vscode.postMessage({ alert: str });
+      }
 
-    panel.webview.html = `
-    <div>${resolvedUri}</div>
-    <pre>${JSON.stringify(resolvedUri, null, 2)}</pre>
-    IMG: <img src="${resolvedUri}"> <br>
-    IFRAME: <iframe src="${resolvedUri}"><iframe> <br>
-    <br><br>
-    `;
-  }
+      function detectTitleChange() {
+        let lastTitleReported = '';
+        setTimeout(verifyTitle, 100);
 
-  /**
-   * @param {import('vscode').Uri | undefined} uri
-   * @param {string} html
-   */
-  function showWebviewHtml(uri, html) {
-    const panel = vscode.window.createWebviewPanel(
-      'file preview',
-      'HTML FILE PREVIEW',
-      vscode.ViewColumn.One,
-      { enableScripts: true }
-    );
-    
-    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
-    const resolvedUriBase = resolvedUri && vscode.Uri.joinPath(resolvedUri, '..');
+        /** @type {typeof MutationObserver} */
+        const MutationObserverCtr = typeof MutationObserver === 'function' ? MutationObserver :
+          // @ts-ignore
+          typeof WebKitMutationObserver === 'function' ? WebKitMutationObserver : null;
+        if (!MutationObserverCtr) return;
 
-    const injectBaseHref = '<base href="' + resolvedUriBase + '">';
-    let htmlInjectBase =
-      html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectBaseHref);
-    if (htmlInjectBase === html)
-      htmlInjectBase = injectBaseHref + html;
+        const observerInstance = new MutationObserverCtr(verifyTitle);
+        observerInstance.observe(document.head, { childList: true, subtree: true });
 
+        function verifyTitle() {
+          if (document.title !== lastTitleReported) {
+            lastTitleReported = document.title;
+            vscode.postMessage({ title: document.title });
+          }
+        }
+      }
 
-    panel.webview.html = htmlInjectBase;
-  }
+      console.log('HTML Preview Injector');
+      window.alert = alert;
+      detectTitleChange();
+    };
+  })();
 
 }
