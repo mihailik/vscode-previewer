@@ -10,22 +10,59 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.helloWorld"
+    "onCommand:web-previewer.helloWorld",
+    "onView:calicoColors.colorsView",
+    "onCommand:calicoColors.addColor",
+    "onCommand:calicoColors.clearColors"
   ],
   "browser": "./index.js",
+
   "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "calicoColors.colorsView",
+          "name": "Calico Colors"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "web-previewer.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "calicoColors.addColor",
+        "category": "Calico Colors",
+        "title": "Add Color"
+      },
+      {
+        "command": "calicoColors.clearColors",
+        "category": "Calico Colors",
+        "title": "Clear Colors",
+        "icon": "$(clear-all)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "calicoColors.clearColors",
+          "group": "navigation",
+          "when": "view == calicoColors.colorsView"
+        }
+      ]
+    }
   },
+
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
   },
-  "dependencies": {
+  "devDependencies": {
     "@types/vscode": "^1.73.0",
     "@vscode/test-web": "^0.0.32"
+  },
+  "dependencies": {
+    "typescript": "^4.8.4"
   }
 }
