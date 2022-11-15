@@ -2,7 +2,7 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "",
-  "version": "0.0.2",
+  "version": "0.9.0",
   "publisher": "mihailik",
   "engines": {
     "vscode": "^1.73.0"
@@ -11,23 +11,27 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.activeDocumentAsHtml"
+    "onCommand:web-previewer.activeDocumentAsHtml",
+    "onCommand:web-previewer.selectedDocumentAsHtml"
   ],
   "browser": "./index.js",
   "contributes": {
     "commands": [
       {
         "command": "web-previewer.activeDocumentAsHtml",
-        "title": "Preview as HTML"
+        "title": "🌍 HTML Preview"
+      },
+      {
+        "command": "web-previewer.selectedDocumentAsHtml",
+        "title": "🌍 HTML Preview"
       }
     ],
     "menus": {
-      "commandPalette": [
-        {
-          "command": "web-previewer.activeDocumentAsHtml",
-          "when": "editorLangId == html"
-        }
-      ]
+      "explorer/context":[{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
+      "editor/context": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "editorLangId == html" }],
+      "editor/title": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
+      "editor/title/context": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
+      "commandPalette": [{ "command": "web-previewer.activeDocumentAsHtml", "when": "editorLangId == html" }]
     }
   },
   "scripts": {
