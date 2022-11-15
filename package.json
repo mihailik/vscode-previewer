@@ -27,11 +27,36 @@
       }
     ],
     "menus": {
-      "explorer/context":[{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
-      "editor/context": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "editorLangId == html" }],
-      "editor/title": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
-      "editor/title/context": [{ "command": "web-previewer.selectedDocumentAsHtml", "when": "resourceExtname == .html || resourceExtname == .htm" }],
-      "commandPalette": [{ "command": "web-previewer.activeDocumentAsHtml", "when": "editorLangId == html" }]
+      "explorer/context": [
+        {
+          "command": "web-previewer.selectedDocumentAsHtml",
+          "when": "resourceExtname == .html || resourceExtname == .htm"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "web-previewer.selectedDocumentAsHtml",
+          "when": "editorLangId == html"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "web-previewer.selectedDocumentAsHtml",
+          "when": "resourceExtname == .html || resourceExtname == .htm"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "web-previewer.selectedDocumentAsHtml",
+          "when": "resourceExtname == .html || resourceExtname == .htm"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "web-previewer.activeDocumentAsHtml",
+          "when": "editorLangId == html"
+        }
+      ]
     }
   },
   "scripts": {
