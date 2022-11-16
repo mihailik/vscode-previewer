@@ -2,7 +2,7 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -12,49 +12,44 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.activeDocumentAsHtml",
-    "onCommand:web-previewer.selectedDocumentAsHtml"
+    "onCommand:web-previewer.activeDocumentAsHtml"
   ],
   "browser": "./index.js",
   "contributes": {
     "commands": [
       {
-        "command": "web-previewer.activeDocumentAsHtml",
-        "title": "🌍 HTML Preview"
-      },
-      {
-        "command": "web-previewer.selectedDocumentAsHtml",
+        "command": "web-previewer.previewDocumentAsHtml",
         "title": "🌍 HTML Preview"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "web-previewer.selectedDocumentAsHtml",
+          "command": "web-previewer.previewDocumentAsHtml",
           "when": "resourceExtname == .html || resourceExtname == .htm"
         }
       ],
       "editor/context": [
         {
-          "command": "web-previewer.selectedDocumentAsHtml",
+          "command": "web-previewer.previewDocumentAsHtml",
           "when": "editorLangId == html"
         }
       ],
       "editor/title": [
         {
-          "command": "web-previewer.selectedDocumentAsHtml",
+          "command": "web-previewer.previewDocumentAsHtml",
           "when": "resourceExtname == .html || resourceExtname == .htm"
         }
       ],
       "editor/title/context": [
         {
-          "command": "web-previewer.selectedDocumentAsHtml",
+          "command": "web-previewer.previewDocumentAsHtml",
           "when": "resourceExtname == .html || resourceExtname == .htm"
         }
       ],
       "commandPalette": [
         {
-          "command": "web-previewer.activeDocumentAsHtml",
+          "command": "web-previewer.previewDocumentAsHtml",
           "when": "editorLangId == html"
         }
       ]

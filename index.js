@@ -13,31 +13,10 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      webPreviewerStr + '.activeDocumentAsHtml',
-      () => {
-        if (!vscode.window.activeTextEditor) throw new Error('No document selected.');
-        const { document } = vscode.window.activeTextEditor;
-
-        openDocumentAsHtml(document);
-      }
+      webPreviewerStr + '.previewDocumentAsHtml',
+      openDocumentOrUriAsHtml
     ));
   
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      webPreviewerStr + '.selectedDocumentAsHtml',
-      /** @type {import('vscode').TextDocument | import('vscode').Uri} */
-      (documentOrUri) => {
-        if (!documentOrUri) throw new Error('No document selected.');
-        if (/** @type {import('vscode').TextDocument} */(documentOrUri).uri) {
-          openDocumentAsHtml(/** @type {import('vscode').TextDocument} */(documentOrUri));
-        } else if (/** @type {import('vscode').Uri} */(documentOrUri).scheme || /** @type {import('vscode').Uri} */(documentOrUri).path) {
-          return openUriAsHtml(/** @type {import('vscode').Uri} */(documentOrUri));
-        } else {
-          throw new Error('Document parameter is not provided.');
-        }
-      }
-    ));
-
   const embeddedCode = (() => {
     return function () {
       const vscode =
@@ -79,6 +58,25 @@ function activate(context) {
       detectTitleChange();
     };
   })();
+
+  /** @param {import('vscode').TextDocument | import('vscode').Uri} documentOrUri */
+  function openDocumentOrUriAsHtml(documentOrUri) {
+    if (!documentOrUri) throw new Error('No document selected.');
+    if (!documentOrUri) {
+      if (vscode.window.activeTextEditor?.document.languageId === 'html')
+        return openDocumentAsHtml(vscode.window.activeTextEditor.document);
+      if (vscode.window.activeTextEditor) throw new Error('No editor currently open.');
+      else throw new Error('Current editor does not recognize HTML.');
+    }
+
+    if (/** @type {import('vscode').TextDocument} */(documentOrUri).uri) {
+      openDocumentAsHtml(/** @type {import('vscode').TextDocument} */(documentOrUri));
+    } else if (/** @type {import('vscode').Uri} */(documentOrUri).scheme || /** @type {import('vscode').Uri} */(documentOrUri).path) {
+      return openUriAsHtml(/** @type {import('vscode').Uri} */(documentOrUri));
+    } else {
+      throw new Error('Document parameter is not provided.');
+    }
+  }
 
   /** @param {import('vscode').Uri} uri */
   async function openUriAsHtml(uri) {
