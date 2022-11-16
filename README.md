@@ -2,6 +2,8 @@
 
 Open current document inside VSCode WebView as an normal HTML page.
 
+![🌍 HTML Preview](./demo.gif)
+
 Supports:
 * local and remote images: `<IMG SRC="...">`
 * local, remote and embedded scripts: `<SCRIPT SRC="..."></SCRIPT>` and `<SCRIPT> ... </SCRIPT>`
