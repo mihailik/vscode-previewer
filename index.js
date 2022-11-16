@@ -2,6 +2,10 @@
 
 module.exports.activate = activate;
 
+function deactivate() {
+  // nothing
+}
+
 /**
  * @param {import('vscode').ExtensionContext} context 
  */
