@@ -121,8 +121,6 @@ function activate(context) {
 
     const resolvedUri =
       panel.webview.asWebviewUri(document.uri);
-    const resolvedUriBase =
-      vscode.Uri.joinPath(resolvedUri, '..');
 
     const injectCustom = '<base href="' + resolvedUri + '"><' + 'script' + '>(' + embeddedCode + ')()</' + 'script' + '>';
     let htmlInjectBase = html.replace(/<head[^>]*>/, str => str + injectCustom);
@@ -133,7 +131,14 @@ function activate(context) {
 
     panel.webview.onDidReceiveMessage(handleWebViewMessage);
 
-    panel.webview.html = htmlInjectBase;
+    if (panel.webview.html) {
+      panel.webview.html = '';
+      setTimeout(function () {
+        panel.webview.html = htmlInjectBase;
+      }, 100);
+    } else {
+      panel.webview.html = htmlInjectBase;
+    }
 
     function handleWebViewMessage(msg) {
       if ('alert' in msg) {
