@@ -1,8 +1,8 @@
 {
   "name": "web-previewer",
   "displayName": "web-previewer",
-  "description": "",
-  "version": "1.0.5",
+  "description": "Web Previewer",
+  "version": "1.0.6",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -60,9 +60,9 @@
     "vsce_package": "vsce package",
     "vsce_publish": "vsce publish"
   },
-  "devDependencies": {
-    "@types/vscode": "^1.73.0",
-    "@vscode/test-web": "^0.0.32",
-    "vsce": "^2.14.0"
+  "dependencies": {
+    "@types/vscode": "^1.87.0",
+    "@vscode/test-web": "^0.0.52",
+    "vsce": "^2.15.0"
   }
 }
