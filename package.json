@@ -61,8 +61,8 @@
     "vsce_publish": "vsce publish"
   },
   "dependencies": {
-    "@types/vscode": "^1.87.0",
-    "@vscode/test-web": "^0.0.52",
-    "@vscode/vsce": "^2.24.0"
+    "@types/vscode": "^1.88.0",
+    "@vscode/test-web": "^0.0.54",
+    "@vscode/vsce": "^2.26.0"
   }
 }
