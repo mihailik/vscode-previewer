@@ -63,6 +63,6 @@
   "dependencies": {
     "@types/vscode": "^1.87.0",
     "@vscode/test-web": "^0.0.52",
-    "vsce": "^2.15.0"
+    "@vscode/vsce": "^2.24.0"
   }
 }

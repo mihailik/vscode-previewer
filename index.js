@@ -163,27 +163,24 @@ function webPreviewer() {
   }
 
   function runBrowser() {
+    // TODO: if this looks like hosted file access, refresh after installing service worker
 
     createFileViewerUI();
     registerServiceWorker();
 
     function createFileViewerUI() {
       if (!document.body) {
-        const body = document.createElement('body');
-        try {
-          document.documentElement?.appendChild(body);
-        } catch (err) { }
-        try {
-          if (!document.body)
-            document.body = body;
-        } catch (err) { }
+        setTimeout(() => {
+          createFileViewerUI();
+        }, 10);
+        return;
       }
 
       const h2 = document.createElement('h2');
-      h2.textContent = 'LIVE';
+      h2.textContent = 'LIVE1';
       document.body.appendChild(h2);
 
-      document.title = 'LIVE';
+      document.title = 'LIVE1';
 
       console.log('TODO: show file manager');
     }
