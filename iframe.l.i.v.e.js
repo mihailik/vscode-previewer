@@ -1,5 +1,6 @@
 // @ts-check
 /// <reference types="node" />
+/// <reference lib="webworker" />
 // <script>
 
 function webPreviewer() {
@@ -249,27 +250,44 @@ function webPreviewer() {
     });
 
     /**
-     * @param {{ request: Request }} _
+     * @param {FetchEvent} _
      */
     async function handleFetch({ request }) {
       console.log('handleFetch ', request);
       const parsedURL = new URL(request.url);
-      return new Response(
-        '// @ts-check\n' +
-        '/// <reference types="node" /' + '>\n' +
-        '// <' + 'script' + '>\n' +
-        '\n' +
-        webPreviewer + ' webPreviewer() // <' + '/script' + '> serviceWorker generated at ' + new Date() + '\n',
-        {
-          status: 200,
-          headers: {
-            'Content-Type':
-              parsedURL.pathname.endsWith('.js') ?
-                'application/javascript' :
-                'text/html'
-          },
-        });
+      if (parsedURL.pathname === '/iframe.l.i.v.e.js') {
+        if (request.method === 'GET') {
+          return new Response(
+            getSelfText(' serviceWorker generated at ' + new Date()),
+            { status: 200, headers: { 'Content-Type': 'application/javascript' } });
+        }
+      }
+
+      const cached = await caches.match(request);
+      if (cached) return cached;
+
+      if (parsedURL.pathname === '/' || parsedURL.pathname === '/index.html') {
+        return new Response(
+          '<' + 'script src=/iframe.l.i.v.e.js></' + 'script' + '>',
+          { status: 200, headers: { 'Content-Type': 'text/html' } });
+      } else if (parsedURL.pathname === '/favicon.ico') {
+        return new Response(
+          '',
+          { status: 200, headers: { 'Content-Type': 'text/plain' } });
+      }
+
+      // TODO: provide better error response
+      return Response.error();
     }
+  }
+
+  /** @param {string} [inject] */
+  function getSelfText(inject) {
+    return '// @ts-check\n' +
+      '/// <reference types="node" /' + '>\n' +
+      '// <' + 'script' + '>\n' +
+      '\n' +
+      webPreviewer + ' webPreviewer() // <' + '/script' + '>' + (inject || '') + '\n'
   }
 
   console.log('webPreviewer() ', {
