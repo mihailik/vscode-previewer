@@ -2,19 +2,17 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "Web Previewer",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
-    "vscode": "^1.73.0"
+    "vscode": "^1.74.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:web-previewer.previewDocumentAsHtml"
-  ],
-  "browser": "./index.js",
+  "activationEvents": [],
+  "browser": "./iframe.l.i.v.e.js",
   "contributes": {
     "commands": [
       {
@@ -57,12 +55,14 @@
   },
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
+    "start-frame": "node ./iframe.l.i.v.e.js",
     "vsce_package": "vsce package",
     "vsce_publish": "vsce publish"
   },
-  "dependencies": {
-    "@types/vscode": "^1.88.0",
-    "@vscode/test-web": "^0.0.54",
-    "@vscode/vsce": "^2.26.0"
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/vscode": "^1.91.0",
+    "@vscode/test-web": "^0.0.56",
+    "@vscode/vsce": "^2.29.0"
   }
 }
