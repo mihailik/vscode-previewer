@@ -259,7 +259,15 @@ function webPreviewer() {
         if (request.method === 'GET') {
           return new Response(
             getSelfText(' serviceWorker generated at ' + new Date()),
-            { status: 200, headers: { 'Content-Type': 'application/javascript' } });
+            {
+              status: 200,
+              headers: {
+                'Content-Type':
+                  request.destination === 'document' ?
+                    'text/html' :
+                    'application/javascript'
+              }
+            });
         }
       }
 
