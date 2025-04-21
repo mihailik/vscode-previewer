@@ -1,6 +1,6 @@
 {
-  "name": "tty-vscode",
-  "displayName": "tty-vscode",
+  "name": "tty-wasm",
+  "displayName": "tty-wasm",
   "description": "Terminal in WASM for VSCode",
   "version": "0.1.0",
   "publisher": "mihailik",
@@ -15,7 +15,7 @@
   "browser": "./t.t.y.js",
   "contributes": {
       "terminal.profiles": {
-        "viewType": "tty-vscode",
+        "viewType": "tty-wasm",
         "title": "Terminal in WASM",
         "icon": {
           "id": "terminal"
@@ -23,7 +23,7 @@
       },
     "commands": [
       {
-        "command": "tty-vscode.createTerminal",
+        "command": "tty-wasm.createTerminal",
         "title": "TTY Terminal in WASM"
       }
     ]
