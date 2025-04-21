@@ -1,17 +1,10 @@
-# HTML Preview for VSCode
+# TTY: Terminal in WASM for VSCode
 
-Open current document inside VSCode WebView as an normal HTML page.
+Building an extension to run Linux-like **bash** terminal in VSCode/Web and full VSCode
+virtualised inside WASM environment.
 
-![🌍 HTML Preview](./demo.gif)
+The goal is to expose the virtual VSCode filesystem to the shell, and gradually add more tools.
 
-Supports:
-* local and remote images: `<IMG SRC="...">`
-* local, remote and embedded scripts: `<SCRIPT SRC="..."></SCRIPT>` and `<SCRIPT> ... </SCRIPT>`
-* local, remote and embedded stylesheets: `<LINK REL=STYLESHEET HREF="...">` and `<STYLE> ... </STYLE>`
-* `alert(...)` popups
-* notifications on unhandled exceptions
+Python would be possible with pyodide.
 
-Does not support (security restricted):
-* embedded pages: `<IFRAME>` and `<OBJECT>`
-* opening new windows: `window.open(...)`
-* synchronous prompts: `prompt(...)`
+Node.js might be cool too.
