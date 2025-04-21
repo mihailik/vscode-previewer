@@ -1,8 +1,8 @@
 {
-  "name": "web-previewer",
-  "displayName": "web-previewer",
-  "description": "Web Previewer",
-  "version": "1.0.9",
+  "name": "tty-vscode",
+  "displayName": "tty-vscode",
+  "description": "Terminal in WASM for VSCode",
+  "version": "0.1.0",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -12,58 +12,33 @@
     "Other"
   ],
   "activationEvents": [],
-  "browser": "./iframe.l.i.v.e.js",
+  "browser": "./t.t.y.js",
   "contributes": {
+      "terminal.profiles": {
+        "viewType": "tty-vscode",
+        "title": "Terminal in WASM",
+        "icon": {
+          "id": "terminal"
+        }
+      },
     "commands": [
       {
-        "command": "web-previewer.previewDocumentAsHtml",
-        "title": "🌍 HTML Preview"
+        "command": "tty-vscode.createTerminal",
+        "title": "TTY Terminal in WASM"
       }
-    ],
-    "menus": {
-      "explorer/context": [
-        {
-          "command": "web-previewer.previewDocumentAsHtml",
-          "when": "resourceExtname == .html || resourceExtname == .htm"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "web-previewer.previewDocumentAsHtml",
-          "when": "editorLangId == html"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "web-previewer.previewDocumentAsHtml",
-          "when": "resourceExtname == .html || resourceExtname == .htm"
-        }
-      ],
-      "editor/title/context": [
-        {
-          "command": "web-previewer.previewDocumentAsHtml",
-          "when": "resourceExtname == .html || resourceExtname == .htm"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "web-previewer.previewDocumentAsHtml",
-          "when": "editorLangId == html"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
     "start-vtwfix": "node ../vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
-    "start-frame": "node ./iframe.l.i.v.e.js",
+    "start-frame": "node ./t.t.y.js",
     "vsce_package": "vsce package",
     "vsce_publish": "vsce publish"
   },
   "devDependencies": {
-    "@types/node": "^20.14.9",
-    "@types/vscode": "^1.91.0",
-    "@vscode/test-web": "^0.0.56",
-    "@vscode/vsce": "^2.29.0"
+    "@types/node": "*",
+    "@types/vscode": "*",
+    "@vscode/test-web": "*",
+    "@vscode/vsce": "*"
   }
 }
