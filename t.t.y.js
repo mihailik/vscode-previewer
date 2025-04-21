@@ -3,7 +3,7 @@
 /// <reference lib="webworker" />
 // <script>
 
-function webPreviewer() {
+function ttyWASM() {
 
   function registerVscodeAddon(moduleExports) {
 
@@ -166,21 +166,21 @@ function webPreviewer() {
   }
 
   function tryRunningNode() {
-    const { createServer } = require('http');
-    const fs = require('fs');
-    const port = 2024;
-    const server = createServer((req, res) => {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', /\.js\b/i.test(req.url || '') ? 'application/javascript' : 'text/html');
-      fs.readFile(__filename, (err, data) => {
-        res.end(data);
-      });
-      });
-    ['127.0.0.1', 'localhost'].forEach(hostname =>
-      server.listen(port, hostname, () => {
-      console.log(`Server running at http://${hostname}:${port}/`);
-      })
-    );
+    // const { createServer } = require('http');
+    // const fs = require('fs');
+    // const port = 2024;
+    // const server = createServer((req, res) => {
+    //   res.statusCode = 200;
+    //   res.setHeader('Content-Type', /\.js\b/i.test(req.url || '') ? 'application/javascript' : 'text/html');
+    //   fs.readFile(__filename, (err, data) => {
+    //     res.end(data);
+    //   });
+    //   });
+    // ['127.0.0.1', 'localhost'].forEach(hostname =>
+    //   server.listen(port, hostname, () => {
+    //   console.log(`Server running at http://${hostname}:${port}/`);
+    //   })
+    // );
   }
 
   function runBrowser() {
@@ -295,10 +295,10 @@ function webPreviewer() {
       '/// <reference types="node" /' + '>\n' +
       '// <' + 'script' + '>\n' +
       '\n' +
-      webPreviewer + ' webPreviewer() // <' + '/script' + '>' + (inject || '') + '\n'
+      ttyWASM + ' webPreviewer() // <' + '/script' + '>' + (inject || '') + '\n'
   }
 
-  console.log('webPreviewer() ', {
+  console.log('ttyWASM() ', {
     module: typeof module,
     'module.exports': typeof module === 'undefined' ? 'undefined' : typeof module.exports,
     process: typeof process,
@@ -318,4 +318,4 @@ function webPreviewer() {
     return runWorker();
   }
 
-} webPreviewer() // </script>
+} ttyWASM() // </script>
