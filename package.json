@@ -2,7 +2,7 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "Web Previewer",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -56,6 +56,24 @@
         },
         {
           "command": "web-previewer.openJsTerminal"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "webPreviewer.runtimeFrameView",
+          "name": "Runtime",
+          "type": "webview",
+          "icon": ""
+        }
+      ]
+    },
+    "terminal": {
+      "profiles": [
+        {
+          "title": "JS Terminal",
+          "id": "web-previewer.jsTerminal"
         }
       ]
     }
