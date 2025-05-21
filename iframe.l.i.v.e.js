@@ -1,11 +1,13 @@
 // @ts-check
+/// <reference types="node" />
+// <script>
 
 function webPreviewer() {
 
-  function runVscodeAddon() {
+  function registerVscodeAddon(moduleExports) {
 
-    module.exports.activate = activate;
-    module.exports.deactivate = deactivate;
+    moduleExports.activate = activate;
+    moduleExports.deactivate = deactivate;
 
     function deactivate() {
       // nothing
@@ -162,6 +164,24 @@ function webPreviewer() {
     }
   }
 
+  function tryRunningNode() {
+    const { createServer } = require('http');
+    const fs = require('fs');
+    const port = 2024;
+    const server = createServer((req, res) => {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', /\.js\b/i.test(req.url || '') ? 'application/javascript' : 'text/html');
+      fs.readFile(__filename, (err, data) => {
+        res.end(data);
+      });
+      });
+    ['127.0.0.1', 'localhost'].forEach(hostname =>
+      server.listen(port, hostname, () => {
+      console.log(`Server running at http://${hostname}:${port}/`);
+      })
+    );
+  }
+
   function runBrowser() {
     // TODO: if this looks like hosted file access, refresh after installing service worker
 
@@ -183,23 +203,93 @@ function webPreviewer() {
       document.title = 'LIVE1';
 
       console.log('TODO: show file manager');
+
+      let num = 1;
+      setInterval(() => {
+        num++;
+        document.title = 'LIVE' + num;
+        h2.textContent = 'LIVE' + num;
+      }, 1000);
     }
 
-    function registerServiceWorker() {
-      console.log('TODO: register service worker');
+    async function registerServiceWorker() {
+      if (!('serviceWorker' in navigator)) {
+        console.log('Service workers are not supported on the platform.');
+        return;
+      }
+
+      console.log('Detecting service worker status...');
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        console.log('Service worker is already registered: ', reg);
+      } else {
+        console.log('Service worker is not detected, registering...');
+        const wrk = await navigator.serviceWorker.register('/iframe.l.i.v.e.js');
+        console.log('Service worker, awaiting completion: ', wrk);
+        const readyWk = await navigator.serviceWorker.ready;
+        console.log('Success, reload page with service worker ', readyWk);
+        location.reload();
+      }
     }
   }
 
   function runWorker() {
     console.log('TODO: handle fetch requests');
+
+    self.addEventListener('activate', (event) => {
+      // event.waitUntil(...)
+    });
+
+    self.addEventListener('install', (event) => {
+      // event.waitUntil(...)
+    });
+
+    self.addEventListener('fetch', (event) => {
+      event.respondWith(handleFetch(event));
+    });
+
+    /**
+     * @param {{ request: Request }} _
+     */
+    async function handleFetch({ request }) {
+      console.log('handleFetch ', request);
+      const parsedURL = new URL(request.url);
+      return new Response(
+        '// @ts-check\n' +
+        '/// <reference types="node" /' + '>\n' +
+        '// <' + 'script' + '>\n' +
+        '\n' +
+        webPreviewer + ' webPreviewer() // <' + '/script' + '> serviceWorker generated at ' + new Date() + '\n',
+        {
+          status: 200,
+          headers: {
+            'Content-Type':
+              parsedURL.pathname.endsWith('.js') ?
+                'application/javascript' :
+                'text/html'
+          },
+        });
+    }
   }
 
+  console.log('webPreviewer() ', {
+    module: typeof module,
+    'module.exports': typeof module === 'undefined' ? 'undefined' : typeof module.exports,
+    process: typeof process,
+    window: typeof window,
+    self: typeof self
+  });
+
   if (typeof module !== 'undefined' && module?.exports) {
-    return runVscodeAddon();
+    if (typeof require === 'function' && require.main === module &&
+      typeof process !== undefined && typeof process?.arch === 'string')
+      tryRunningNode();
+
+    return registerVscodeAddon(module.exports);
   } else if (typeof window !== 'undefined' && typeof window?.alert === 'function') {
     return runBrowser();
   } else if (typeof self !== 'undefined' && typeof self?.Math?.sin === 'function') {
     return runWorker();
   }
 
-} webPreviewer()
+} webPreviewer() // </script>
