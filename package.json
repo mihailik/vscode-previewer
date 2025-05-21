@@ -12,7 +12,7 @@
   "activationEvents": [
     "onCommand:web-previewer.helloWorld"
   ],
-  "browser": "./dist/web/extension.js",
+  "browser": "./index.js",
   "contributes": {
     "commands": [
       {
