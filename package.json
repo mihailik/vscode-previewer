@@ -10,26 +10,24 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.asExtensionLocal",
-    "onCommand:web-previewer.activeDocument",
     "onCommand:web-previewer.activeDocumentAsHtml"
   ],
   "browser": "./index.js",
   "contributes": {
     "commands": [
       {
-        "command": "web-previewer.asExtensionLocal",
-        "title": "Preview Extension Local"
-      },
-      {
-        "command": "web-previewer.activeDocument",
-        "title": "Preview Active Document"
-      },
-      {
         "command": "web-previewer.activeDocumentAsHtml",
-        "title": "Preview Active HTML"
+        "title": "Preview as HTML"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "web-previewer.activeDocumentAsHtml",
+          "when": "editorLangId == html && isWeb"
+        }
+      ]
+    }
   },
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
