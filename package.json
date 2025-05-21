@@ -30,13 +30,13 @@
     }
   },
   "scripts": {
-    "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
+    "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
+    "vsce_package": "vsce package",
+    "vsce_publish": "vsce publish"
   },
   "devDependencies": {
     "@types/vscode": "^1.73.0",
-    "@vscode/test-web": "^0.0.32"
-  },
-  "dependencies": {
-    "typescript": "^4.8.4"
+    "@vscode/test-web": "^0.0.32",
+    "vsce": "^2.14.0"
   }
 }
