@@ -5,6 +5,9 @@
 
 function webPreviewer() {
 
+  /** @type {HTMLIFrameElement | Promise<HTMLIFrameElement> | undefined} */
+  var controlIFRAME;
+
   function registerVscodeAddon(moduleExports) {
 
     moduleExports.activate = activate;
@@ -18,8 +21,12 @@ function webPreviewer() {
      * @param {import('vscode').ExtensionContext} context 
      */
     function activate(context) {
+      console.log('webPreviewer:activate', context);
+
       const vscode = require('vscode');
       const webPreviewerStr = 'web-previewer';
+
+      // controlIFRAME = initControlIframe();
 
       const documentPanels = {};
 
@@ -165,6 +172,22 @@ function webPreviewer() {
     }
   }
 
+  function initControlIframe() {
+    const controlIFRAMEInit = document.createElement('iframe');
+    controlIFRAMEInit.style.cssText =
+      'width: 200px; height: 200px; position: fixed; top: -190px; left: -190px; z-index: -1; pointer-events: none; border: none; opacity: 0.01;';
+    document.body.appendChild(controlIFRAMEInit);
+    return new Promise((resolve, reject) => {
+      controlIFRAMEInit.onload = () => {
+        resolve(controlIFRAMEInit);
+      };
+      controlIFRAMEInit.onerror = (event, source, lineno, colno, error) => {
+        console.log('Error loading iframe: ', event, source, lineno, colno, error);
+        reject(error);
+      };
+    });
+  }
+
   function tryRunningNode() {
     const { createServer } = require('http');
     const fs = require('fs');
@@ -259,7 +282,15 @@ function webPreviewer() {
         if (request.method === 'GET') {
           return new Response(
             getSelfText(' serviceWorker generated at ' + new Date()),
-            { status: 200, headers: { 'Content-Type': 'application/javascript' } });
+            {
+              status: 200,
+              headers: {
+                'Content-Type':
+                  request.destination === 'document' ?
+                    'text/html' :
+                    'application/javascript'
+              }
+            });
         }
       }
 
