@@ -2,7 +2,7 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "Web Previewer",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -18,6 +18,10 @@
       {
         "command": "web-previewer.previewDocumentAsHtml",
         "title": "🌍 HTML Preview"
+      },
+      {
+        "command": "web-previewer.openJsTerminal",
+        "title": "JS Terminal: Open"
       }
     ],
     "menus": {
@@ -49,6 +53,9 @@
         {
           "command": "web-previewer.previewDocumentAsHtml",
           "when": "editorLangId == html"
+        },
+        {
+          "command": "web-previewer.openJsTerminal"
         }
       ]
     }

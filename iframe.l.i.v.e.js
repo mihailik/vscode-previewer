@@ -35,6 +35,85 @@ function webPreviewer() {
           webPreviewerStr + '.previewDocumentAsHtml',
           openDocumentOrUriAsHtml
         ));
+
+      // --- JS Terminal Logic ---
+
+      /**
+       * Creates a new Pseudoterminal instance for a simple JS REPL.
+       * @param {string} [terminalTypeName="JS"] - Name to display in the initial message.
+       * @returns {import('vscode').Pseudoterminal}
+       */
+      function createJsReplPty(terminalTypeName = "JS") {
+        const writeEmitter = new vscode.EventEmitter();
+        let commandLine = ""; // Buffer for the current line of input
+
+        return {
+          onDidWrite: writeEmitter.event,
+          open: () => {
+            commandLine = "";
+            writeEmitter.fire(`${terminalTypeName} Terminal Started\r\n> `);
+          },
+          close: () => { /* Nothing to do */ },
+          handleInput: data => {
+            if (data === '\r') { // Enter key
+              writeEmitter.fire('\r\n'); // Echo newline
+              if (commandLine.trim()) {
+                let output;
+                try {
+                  // Unsafe eval: Be very careful with this in a real extension.
+                  // Consider sandboxing or a safer execution environment.
+                  output = String(eval(commandLine));
+                } catch (e) {
+                  output = `Error: ${e.message}`;
+                }
+                writeEmitter.fire(`${output}\r\n`);
+              }
+              commandLine = "";
+              writeEmitter.fire('> ');
+            } else if (data === '\x7f') { // Backspace
+              if (commandLine.length > 0) {
+                commandLine = commandLine.slice(0, -1);
+                writeEmitter.fire('\b \b'); // Move cursor back, erase char, move cursor back
+              }
+            } else if (data >= ' ' && data <= '~') { // Printable characters
+              commandLine += data;
+              writeEmitter.fire(data); // Echo character
+            } else {
+              // Echo other non-printable/non-backspace characters (e.g., arrow keys)
+              // but don't add to commandLine or process further for this simple terminal.
+              writeEmitter.fire(data);
+            }
+          }
+        };
+      }
+
+      // Register command to open a JS terminal instance
+      // This command is already declared in your package.json
+      context.subscriptions.push(
+        vscode.commands.registerCommand(webPreviewerStr + '.openJsTerminal', () => {
+          const pty = createJsReplPty("Command"); // Creates a new PTY instance each time
+          const terminal = vscode.window.createTerminal({ name: 'JS Terminal', pty: pty });
+          terminal.show();
+        })
+      );
+
+      // Register Terminal Profile Provider
+      // This makes "Custom JS REPL" an option in the terminal creation dropdown
+      const jsTerminalProfileProvider = {
+        provideTerminalProfile: (token) => {
+          // Each new terminal created from the profile selection gets its own pty instance
+          const pty = createJsReplPty("Profile");
+          return new vscode.TerminalProfile({
+            name: 'Custom JS REPL',
+            pty: pty,
+            isTransient: true
+          });
+        },
+      };
+      context.subscriptions.push(
+        vscode.window.registerTerminalProfileProvider(`${webPreviewerStr}.jsProfileProvider`, jsTerminalProfileProvider)
+      );
+      // --- End JS Terminal Logic ---
   
       const embeddedCode = (() => {
         return function () {
