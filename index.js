@@ -2,53 +2,81 @@
 
 const vscode = require('vscode');
 
-  /**
-   * This method is called when your extension is activated
-   * Your extension is activated the very first time the command is executed
-   * @param {import('vscode').ExtensionContext} context 
-   */
+module.exports = { activate };
+
+/**
+ * @param {import('vscode').ExtensionContext} context 
+ */
 function activate(context) {
 
-  let disposable = vscode.commands.registerCommand('web-previewer.helloWorld', () => {
-    console.log('hello world?');
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.asExtensionLocal',
+      () => showWebviewImg(vscode.Uri.joinPath(context.extensionUri, 'cat.gif'))
+    ));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.activeDocument',
+      () => showWebviewImg(vscode.window.activeTextEditor?.document.uri)
+    ));
+  
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'web-previewer.activeDocumentAsHtml',
+      () => {
+        if (!vscode.window.activeTextEditor) throw new Error('No document selected.');
+
+        const wholeText = vscode.window.activeTextEditor.document.getText();
+        showWebviewHtml(vscode.window.activeTextEditor.document.uri, wholeText);
+      }
+    ));
+
+  /**
+   * @param {import('vscode').Uri | undefined} uri
+   */
+  function showWebviewImg(uri) {
     const panel = vscode.window.createWebviewPanel(
-      'file preview', // Identifies the type of the webview. Used internally
-      'HTML FILE PREVIEW', // Title of the panel displayed to the user
-      vscode.ViewColumn.One, // Editor column to show the new webview panel in.
-      {
-        enableScripts: true
-      } // Webview options. More on these later.
+      'file preview',
+      'HTML FILE PREVIEW',
+      vscode.ViewColumn.One,
+      { enableScripts: true }
     );
 
-    console.log('panel created, getting path: ' + context.extensionPath + 'index.js');
+    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
 
-    const onDiskPath = vscode.Uri.file(
-      vscode.window.activeTextEditor?.document.fileName || 'index.js');
-      ///*context.extensionPath +*/ 'index.js');
+    panel.webview.html = `
+    <div>${resolvedUri}</div>
+    <pre>${JSON.stringify(resolvedUri, null, 2)}</pre>
+    IMG: <img src="${resolvedUri}"> <br>
+    IFRAME: <iframe src="${resolvedUri}"><iframe> <br>
+    <br><br>
+    `;
+  }
 
-    // And get the special URI to use with the webview
-    const specialUrl = panel.webview.asWebviewUri(onDiskPath);
+  /**
+   * @param {import('vscode').Uri | undefined} uri
+   * @param {string} html
+   */
+  function showWebviewHtml(uri, html) {
+    const panel = vscode.window.createWebviewPanel(
+      'file preview',
+      'HTML FILE PREVIEW',
+      vscode.ViewColumn.One,
+      { enableScripts: true }
+    );
+    
+    const resolvedUri = uri && panel.webview.asWebviewUri(uri);
+    const resolvedUriBase = resolvedUri && vscode.Uri.joinPath(resolvedUri, '..');
 
-    console.log('specialUrl ', specialUrl);
+    const injectBaseHref = '<base href="' + resolvedUriBase + '">';
+    let htmlInjectBase =
+      html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectBaseHref);
+    if (htmlInjectBase === html)
+      htmlInjectBase = injectBaseHref + html;
 
-    panel.webview.html =
-      '<HTML><BODY><H1> HEY THERE!</H1> ' +
-    '<A HREF="' + specialUrl + '"> LINK </A> <br><br> ' +
-      '<IFRAME SRC="' + specialUrl + '"> NOFRAME? </IFRAME> ' +
 
-      '<br> <P>' + specialUrl + '</P>' +
-      '</BODY></HTML>';
-  });
+    panel.webview.html = htmlInjectBase;
+  }
 
-  context.subscriptions.push(disposable);
 }
-
-  // This method is called when your extension is deactivated
-function deactivate() {
-}
-
-
-module.exports = {
-  activate: (...args) => /** @type{*} */(activate)(...args),
-  deactivate: (...args) => /** @type{*} */(deactivate)(...args)
-};
