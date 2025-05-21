@@ -2,7 +2,7 @@
   "name": "web-previewer",
   "displayName": "web-previewer",
   "description": "Web Previewer",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "publisher": "mihailik",
   "repository": "https://github.com/mihailik/vscode-previewer",
   "engines": {
@@ -12,7 +12,7 @@
     "Other"
   ],
   "activationEvents": [],
-  "browser": "./iframe.l.i.v.e.js",
+  "browser": "./vscode.w.e.b.js",
   "contributes": {
     "commands": [
       {
@@ -65,7 +65,8 @@
           "id": "webPreviewer.runtimeFrameView",
           "name": "Runtime",
           "type": "webview",
-          "icon": ""
+          "icon": "",
+          "initialSize": 0.1
         }
       ]
     },
@@ -81,7 +82,7 @@
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
     "start-vtwfix": "node ../vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
-    "start-frame": "node ./iframe.l.i.v.e.js",
+    "start-frame": "node ./vscode.w.e.b.js",
     "vsce_package": "vsce package",
     "vsce_publish": "vsce publish"
   },

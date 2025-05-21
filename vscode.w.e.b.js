@@ -413,7 +413,14 @@ function webPreviewer() {
       };
 
       context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(runtimeFrameViewId, runtimeFrameViewProvider)
+        vscode.window.registerWebviewViewProvider(
+          runtimeFrameViewId,
+          runtimeFrameViewProvider,
+          {
+            webviewOptions: {
+              retainContextWhenHidden: true
+            }
+          })
       );
       // --- End Runtime WebviewView Provider ---
     } // End of activate
