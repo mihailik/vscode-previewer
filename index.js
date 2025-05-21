@@ -28,10 +28,8 @@ function activate(context) {
         const resolvedUri =
           //editor.document.uri.scheme === 'file' ? editor.document.uri : // when run from actual shell
             panel.webview.asWebviewUri(editor.document.uri); // when run from VSCode Web
-        const resolvedUriBase =
-          vscode.Uri.joinPath(resolvedUri, '..');
 
-        const injectCustom = '<base href="' + resolvedUriBase + '"><' + 'script' + '>(' + embeddedCode + ')()</' + 'script' + '>';
+        const injectCustom = '<base href="' + resolvedUri + '"><' + 'script' + '>(' + embeddedCode + ')()</' + 'script' + '>';
         let htmlInjectBase = html.replace(/<head[^>]*>/, str => str + injectCustom);
         if (htmlInjectBase === html)
           htmlInjectBase = html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectCustom);
