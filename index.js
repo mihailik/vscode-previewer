@@ -1,6 +1,7 @@
 // @ts-check
 
 module.exports.activate = activate;
+module.exports.deactivate = deactivate;
 
 function deactivate() {
   // nothing
@@ -65,7 +66,7 @@ function activate(context) {
 
   /** @param {import('vscode').TextDocument | import('vscode').Uri} documentOrUri */
   function openDocumentOrUriAsHtml(documentOrUri) {
-    if (!documentOrUri) throw new Error('No document selected.');
+    console.log('previewDocumentAsHtml:openDocumentOrUriAsHtml...');
     if (!documentOrUri) {
       if (vscode.window.activeTextEditor?.document.languageId === 'html')
         return openDocumentAsHtml(vscode.window.activeTextEditor.document);

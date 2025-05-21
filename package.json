@@ -12,7 +12,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:web-previewer.activeDocumentAsHtml"
+    "onCommand:web-previewer.previewDocumentAsHtml"
   ],
   "browser": "./index.js",
   "contributes": {
