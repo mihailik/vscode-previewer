@@ -1,0 +1,385 @@
+// @ts-check
+/// <reference types="node" />
+
+const webPreviewerUncasted = require('./vscode.w.e.b');
+const test = require('node:test');
+const assert = require('node:assert');
+const { JSDOM } = require('jsdom');
+
+/** @type {any} */
+const webPreviewer = webPreviewerUncasted;
+
+console.log({ webPreviewer });
+
+test.describe('webPreviewer top level', () => {
+  test.describe('generateSigningKeyPair', () => {
+    test.it('return publicStr and publicHash', async () => {
+      const { publicStr, publicHash } = await webPreviewer.generateSigningKeyPair();
+      assert.strictEqual(typeof publicStr, 'string', 'publicStr should be a string');
+      assert.strictEqual(typeof publicHash, 'string', 'publicHash should be a string');
+      assert.strictEqual(publicStr.length, 128, 'publicStr should be 128 characters long (hex encoded 64 bytes)');
+      assert.ok(
+        publicHash.length <= 8,
+        'publicHash.length (' + publicHash.length + ', ' + JSON.stringify(publicHash) + ') should be lesser or equal to HASH_CHAR_LENGTH (8) characters long');
+    });
+  });
+
+  test.describe('signData', () => {
+
+    test.it('produce a valid signature and verify it', async () => {
+      const { privateKey, publicKey, publicStr } = await webPreviewer.generateSigningKeyPair();
+      const dataToSign = 'This is some data to sign';
+      const signature = await webPreviewer.signData(privateKey, dataToSign);
+
+      assert.strictEqual(typeof signature, 'string', 'signature should be a string');
+
+      const crypto = require('node:crypto').webcrypto;
+
+      const signatureBuffer = Buffer.from(signature, 'hex');
+      const dataBuffer = new TextEncoder().encode(dataToSign);
+
+      const isVerified = await crypto.subtle.verify(
+        {
+          name: 'HMAC',
+        },
+        publicKey, // This is the CryptoKey object
+        signatureBuffer,
+        dataBuffer
+      );
+      assert.ok(isVerified, 'Signature should be verifiable with the public key');
+    });
+
+    test.it('produce different signatures for different data', async () => {
+      const { privateKey } = await webPreviewer.generateSigningKeyPair();
+      const data1 = 'data1';
+      const data2 = 'data2';
+      const signature1 = await webPreviewer.signData(privateKey, data1);
+      const signature2 = await webPreviewer.signData(privateKey, data2);
+      assert.notStrictEqual(signature1, signature2, 'Signatures for different data should not be the same');
+    });
+
+    test.it('produce different signatures for different keys', async () => {
+      const { privateKey: privateKey1 } = await webPreviewer.generateSigningKeyPair();
+      const { privateKey: privateKey2 } = await webPreviewer.generateSigningKeyPair();
+      const data = 'some data';
+      const signature1 = await webPreviewer.signData(privateKey1, data);
+      const signature2 = await webPreviewer.signData(privateKey2, data);
+      assert.notStrictEqual(signature1, signature2, 'Signatures for different keys should not be the same');
+    });
+  });
+});
+
+test.describe('webPreviewer runExtension', () => {
+  let mockVscode;
+  let activate;
+  let deactivate;
+  let resolveWebviewView;
+  let createWorkerIframeReadyPromise;
+  /** @type {any} */
+  let freshWebPreviewerModule;
+
+  const MOCK_PUBLIC_HASH = "mockHash";
+  const MOCK_PUBLIC_STR = "mockStr".padEnd(128, '0');
+
+  test.beforeEach(async () => {
+    mockVscode = {
+      EventEmitter: test.mock.fn(() => ({
+        event: test.mock.fn(),
+        fire: test.mock.fn(),
+        dispose: test.mock.fn(),
+      })),
+      commands: {
+        registerCommand: test.mock.fn(),
+        executeCommand: test.mock.fn(() => Promise.resolve()),
+      },
+      window: {
+        createWebviewPanel: test.mock.fn(),
+        createTerminal: test.mock.fn(() => ({
+          show: test.mock.fn(),
+          dispose: test.mock.fn(),
+        })),
+        registerTerminalProfileProvider: test.mock.fn(),
+        registerWebviewViewProvider: test.mock.fn(),
+        showErrorMessage: test.mock.fn(),
+        showInformationMessage: test.mock.fn(),
+        onDidOpenTerminal: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+        activeTextEditor: undefined,
+      },
+      workspace: {
+        openTextDocument: test.mock.fn(() => Promise.resolve({ getText: () => '', fileName: 'test.html' })),
+        onDidCloseTextDocument: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+        onDidSaveTextDocument: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+      },
+      Uri: {
+        joinPath: test.mock.fn((base, ...parts) => (base ? (base.path || base) : '') + '/' + parts.join('/')),
+        file: test.mock.fn(path => ({ scheme: 'file', path, fsPath: path, toString: () => `file://${path}` })),
+      },
+      ViewColumn: { One: 1 },
+      TerminalProfile: test.mock.fn(options => options),
+    };
+
+    // Since vscode.w.e.b.js might still use `require('vscode')` internally for other functions
+    // NOT directly called by activate (if any), we keep this for broader compatibility for now.
+    // However, for `activate` itself, the override will be used.
+    const Module = require('module');
+    const originalRequire = Module.prototype.require;
+    Module.prototype.require = function (id) {
+      if (id === 'vscode') {
+        // console.log('Test mock: require("vscode") intercepted');
+        return mockVscode;
+      }
+      return originalRequire.apply(this, arguments);
+    };
+
+    const modulePath = require.resolve('./vscode.w.e.b');
+    delete require.cache[modulePath];
+    freshWebPreviewerModule = require('./vscode.w.e.b');
+
+    // Mock generateSigningKeyPair on the fresh module instance
+    if (freshWebPreviewerModule && typeof freshWebPreviewerModule.generateSigningKeyPair === 'function') {
+      freshWebPreviewerModule.generateSigningKeyPair = test.mock.fn(async () => {
+        return { publicStr: MOCK_PUBLIC_STR, publicHash: MOCK_PUBLIC_HASH, privateKey: {}, publicKey: {} };
+      });
+    }
+    
+    activate = freshWebPreviewerModule.activate;
+    deactivate = freshWebPreviewerModule.deactivate;
+
+    if (freshWebPreviewerModule && freshWebPreviewerModule.runExtension && typeof freshWebPreviewerModule.runExtension === 'object') {
+      resolveWebviewView = freshWebPreviewerModule.runExtension.resolveWebviewView;
+      createWorkerIframeReadyPromise = freshWebPreviewerModule.runExtension.createWorkerIframeReadyPromise;
+    } else {
+      console.error("freshWebPreviewerModule.runExtension is not structured as expected:", freshWebPreviewerModule.runExtension);
+      resolveWebviewView = () => { throw new Error("resolveWebviewView not loaded from module"); };
+      createWorkerIframeReadyPromise = () => { throw new Error("createWorkerIframeReadyPromise not loaded from module"); return Promise.reject(new Error("createWorkerIframeReadyPromise not loaded")); };
+    }
+    // Restore original require after module is loaded and functions are extracted.
+    Module.prototype.require = originalRequire; 
+  });
+
+  test.afterEach(() => {
+    test.mock.restoreAll();
+  });
+
+  test.describe('activate', () => {
+    let mockContext;
+
+    test.beforeEach(async () => {
+      mockContext = {
+        subscriptions: [],
+        extensionUri: mockVscode.Uri.file('/mock/extension/path/activate-test'),
+        globalState: { get: test.mock.fn(), update: test.mock.fn() },
+        workspaceState: { get: test.mock.fn(), update: test.mock.fn() },
+        overrides: { vscode: mockVscode } // Pass mockVscode here
+      };
+      // Reset calls for this specific test suite
+      mockVscode.commands.registerCommand.mock.resetCalls();
+      mockVscode.window.registerTerminalProfileProvider.mock.resetCalls();
+      mockVscode.window.registerWebviewViewProvider.mock.resetCalls();
+      mockVscode.window.onDidOpenTerminal.mock.resetCalls();
+      mockVscode.commands.executeCommand.mock.resetCalls();
+      mockVscode.window.showErrorMessage.mock.resetCalls();
+
+      // Call activate here, so it uses the overridden vscode from mockContext
+      if (activate && typeof activate === 'function') {
+        await activate(mockContext);
+      } else {
+        throw new Error("activate function is not available for testing");
+      }
+    });
+
+    test.it('should register commands and providers using overridden vscode', () => {
+      assert.strictEqual(mockVscode.commands.registerCommand.mock.calls.length, 2, 'Two commands should be registered');
+      assert.strictEqual(mockVscode.window.registerTerminalProfileProvider.mock.calls.length, 1, 'Terminal profile provider should be registered');
+      assert.strictEqual(mockVscode.window.registerWebviewViewProvider.mock.calls.length, 1, 'Webview view provider should be registered');
+      assert.strictEqual(mockVscode.window.onDidOpenTerminal.mock.calls.length, 1, 'onDidOpenTerminal listener should be registered');
+      assert.ok(mockContext.subscriptions.length > 0, 'Subscriptions should be added');
+    });
+
+    test.it('previewDocumentAsHtml command execution flow with overridden vscode', async () => {
+      const previewCommandCall = mockVscode.commands.registerCommand.mock.calls.find(call => call.arguments[0] === 'web-previewer.previewDocumentAsHtml');
+      assert.ok(previewCommandCall, "previewDocumentAsHtml command should be registered");
+      const previewCommandCallback = previewCommandCall.arguments[1];
+      
+      const mockDocUri = mockVscode.Uri.file('/test.html');
+      
+      const currentReadyPromise = createWorkerIframeReadyPromise();
+      let promiseResolved = false;
+      currentReadyPromise.then(() => { promiseResolved = true; });
+
+      mockVscode.commands.executeCommand.mock.mockImplementation(async (commandId) => {
+        if (commandId === 'web-previewer.runtimeFrameView.focus') {
+          /** @type {((message: {command: string, [key: string]: any}) => Promise<void>) | null} */
+          let storedMessageHandler = null;
+
+          const tempMockWebview = {
+            options: {}, html: '', cspSource: 'mockCspSource',
+            onDidReceiveMessage: test.mock.fn((handler) => {
+              storedMessageHandler = handler;
+              return { dispose: test.mock.fn() };
+            }),
+            onDidDispose: test.mock.fn((cb) => ({ dispose: test.mock.fn() })),
+            asWebviewUri: test.mock.fn(uri => uri), postMessage: test.mock.fn(),
+          };
+          const tempMockWebviewView = {
+            webview: tempMockWebview, 
+            onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
+            show: test.mock.fn(), 
+            visible: true,
+          };
+          
+          if (resolveWebviewView && typeof resolveWebviewView === 'function') {
+            resolveWebviewView(tempMockWebviewView, {}, null);
+          } else {
+            console.error("resolveWebviewView is not available or not a function in test");
+            throw new Error("resolveWebviewView not available for test setup");
+          }
+          
+          // tempMockWebview.onDidReceiveMessage would have been called by resolveWebviewView
+          // and storedMessageHandler should now be set.
+          if (typeof storedMessageHandler === 'function') {
+            // @ts-ignore storedMessageHandler could be null here, but the check above should prevent it
+            setImmediate(() => storedMessageHandler({ command: 'workerIframeReady' }));
+          } else {
+            console.error("previewDocumentAsHtml test: messageHandler was not stored or is not a function.", { handler: storedMessageHandler });
+          }
+        }
+        return Promise.resolve();
+      });
+
+      await previewCommandCallback(mockDocUri);
+      
+      await new Promise(resolve => setImmediate(resolve));
+
+      assert.ok(promiseResolved, "workerIframeReadyPromise should have resolved after command execution");
+      assert.ok(mockVscode.commands.executeCommand.mock.calls.some(call => call.arguments[0] === 'web-previewer.runtimeFrameView.focus'));
+      // Ensure error message was not shown
+      assert.strictEqual(mockVscode.window.showErrorMessage.mock.calls.length, 0, "showErrorMessage should not have been called");
+    });
+  });
+
+  test.describe('resolveWebviewView', () => {
+    let mockWebviewView;
+    let mockWebview;
+    let mockContext;
+    let capturedOnDidDisposeCallback = null;
+
+    test.beforeEach(() => {
+      // This beforeEach for 'resolveWebviewView' runs AFTER the main beforeEach.
+      // So, freshWebPreviewerModule and its functions (like generateSigningKeyPair mock) are set up.
+      // The publicHash used by resolveWebviewView should be MOCK_PUBLIC_HASH.
+
+      capturedOnDidDisposeCallback = null;
+      mockWebview = {
+        options: {},
+        html: '',
+        cspSource: 'mockCspSourceValue',
+        onDidReceiveMessage: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+        onDidDispose: test.mock.fn((callback) => {
+          capturedOnDidDisposeCallback = callback;
+          return { dispose: test.mock.fn() };
+        }),
+        asWebviewUri: test.mock.fn(uri => uri),
+        postMessage: test.mock.fn(),
+      };
+      mockWebviewView = {
+        webview: mockWebview,
+        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
+        show: test.mock.fn(),
+        visible: true,
+      };
+      mockContext = {
+        subscriptions: [],
+        extensionUri: mockVscode.Uri.file('/mock/extension/path/activate-test'),
+        globalState: { get: test.mock.fn(), update: test.mock.fn() },
+        workspaceState: { get: test.mock.fn(), update: test.mock.fn() },
+        overrides: { vscode: mockVscode } // Pass mockVscode here
+      };
+    });
+
+    test.it('should set webview HTML and options, including publicHash', async () => {
+      await activate({
+        ...mockContext,
+        overrides: {
+          ...mockContext.overrides,
+          crypto: {
+            subtle: {
+              generateKey: () => /** @type {*} */({ __key: 'mock1' }),
+              exportKey: /** @type {*} */(() => new TextEncoder().encode('mock2')),
+              // the part to emulate the publicHash of tso86l
+              digest: /** @type {*} */(() => (new TextEncoder().encode('mock3_12')).buffer)
+            }
+          }
+        }
+      });
+      assert.ok(resolveWebviewView, "resolveWebviewView should be loaded");
+      resolveWebviewView(mockWebviewView, {}, null);
+      assert.strictEqual(mockWebview.options.enableScripts, true);
+      assert.ok(mockWebview.html.includes('Worker Iframe Host'));
+      // publicHash is faked by producing a predefined digest in the mock crypto above
+      assert.ok(mockWebview.html.includes('tso86l'), `HTML should include the mocked publicHash: ${MOCK_PUBLIC_HASH}`);
+    });
+
+    test.it('should handle workerIframeReady message and resolve promise', async () => {
+      resolveWebviewView(mockWebviewView, {}, null);
+      const readyPromise = createWorkerIframeReadyPromise();
+      const onDidReceiveMessageCallback = mockWebview.onDidReceiveMessage.mock.calls[0].arguments[0];
+      
+      let promiseResolved = false;
+      readyPromise.then(() => { promiseResolved = true; });
+
+      onDidReceiveMessageCallback({ command: 'workerIframeReady' });
+      
+      await new Promise(resolve => setImmediate(resolve)); 
+      assert.strictEqual(promiseResolved, true, 'workerIframeReadyPromise should resolve');
+    });
+
+    test.it('should handle workerIframeError message and reject promise', async () => {
+      resolveWebviewView(mockWebviewView, {}, null);
+      const readyPromise = createWorkerIframeReadyPromise();
+      const onDidReceiveMessageCallback = mockWebview.onDidReceiveMessage.mock.calls[0].arguments[0];
+
+      let promiseRejected = false;
+      readyPromise.then(() => {}, () => { promiseRejected = true; });
+
+      onDidReceiveMessageCallback({ command: 'workerIframeError', error: 'test error' });
+
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(promiseRejected, true, 'workerIframeReadyPromise should reject');
+    });
+
+    test.it('onDidDispose should clear promise state, allowing new promise creation and resolution/rejection', async () => {
+      const promise_before_disposal = createWorkerIframeReadyPromise();
+      
+      resolveWebviewView(mockWebviewView, {}, null);
+      assert.ok(typeof capturedOnDidDisposeCallback === 'function', 'onDidDispose callback should have been captured');
+
+      capturedOnDidDisposeCallback();
+
+      const promise_after_dispose1 = createWorkerIframeReadyPromise();
+      assert.ok(promise_after_dispose1, 'New promise should be creatable after disposal');
+      assert.notStrictEqual(promise_after_dispose1, promise_before_disposal, "A new promise instance should be created after disposal");
+
+      const onDidReceiveMessageCallback = mockWebview.onDidReceiveMessage.mock.calls[0].arguments[0];
+      let p1Resolved = false;
+      promise_after_dispose1.then(() => { p1Resolved = true; });
+      onDidReceiveMessageCallback({ command: 'workerIframeReady' });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(p1Resolved, true, 'Newly created promise (p1) after disposal should resolve');
+
+      assert.ok(typeof capturedOnDidDisposeCallback === 'function', 'onDidDispose callback should still be valid');
+      capturedOnDidDisposeCallback();
+
+      const promise_after_dispose2 = createWorkerIframeReadyPromise();
+      assert.ok(promise_after_dispose2, 'Another new promise should be creatable after second disposal');
+      assert.notStrictEqual(promise_after_dispose2, promise_after_dispose1, "A new promise instance (p2) should be created after second disposal");
+      
+      let p2Rejected = false;
+      promise_after_dispose2.catch(() => { p2Rejected = true; });
+      onDidReceiveMessageCallback({ command: 'workerIframeError', error: 'test error for p2' });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.strictEqual(p2Rejected, true, 'Newly created promise (p2) after second disposal should reject');
+    });
+  });
+
+});

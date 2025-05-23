@@ -62,7 +62,7 @@
     "views": {
       "explorer": [
         {
-          "id": "webPreviewer.runtimeFrameView",
+          "id": "web-previewer.runtimeFrameView",
           "name": "Runtime",
           "type": "webview",
           "icon": "",
@@ -81,15 +81,15 @@
   },
   "scripts": {
     "start": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
-    "start-vtwfix": "node ../vscode-test-web --browserType=chromium --extensionDevelopmentPath=. .",
-    "start-frame": "node ./vscode.w.e.b.js",
     "vsce_package": "vsce package",
-    "vsce_publish": "vsce publish"
+    "vsce_publish": "vsce publish",
+    "test": "node --test"
   },
   "devDependencies": {
     "@types/node": "^22.15.18",
     "@types/vscode": "^1.91.0",
     "@vscode/test-web": "^0.0.69",
-    "@vscode/vsce": "^3.4.0"
+    "@vscode/vsce": "^3.4.0",
+    "jsdom": "^26.1.0"
   }
 }
