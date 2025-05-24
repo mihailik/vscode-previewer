@@ -262,29 +262,31 @@ test.describe('webPreviewer runExtension', () => {
     let mockWebviewView;
     let mockWebview;
     let mockContext;
-    let capturedOnDidDisposeCallback = null;
+    let capturedWebviewViewOnDidDisposeCallback = null; // Renamed for clarity
 
     test.beforeEach(() => {
       // This beforeEach for 'resolveWebviewView' runs AFTER the main beforeEach.
       // So, freshWebPreviewerModule and its functions (like generateSigningKeyPair mock) are set up.
       // The publicHash used by resolveWebviewView should be MOCK_PUBLIC_HASH.
 
-      capturedOnDidDisposeCallback = null;
+      capturedWebviewViewOnDidDisposeCallback = null; // Reset before each test
       mockWebview = {
         options: {},
         html: '',
         cspSource: 'mockCspSourceValue',
         onDidReceiveMessage: test.mock.fn(() => ({ dispose: test.mock.fn() })),
-        onDidDispose: test.mock.fn((callback) => {
-          capturedOnDidDisposeCallback = callback;
-          return { dispose: test.mock.fn() };
-        }),
+        // This onDidDispose is for the webview content itself, not what the code currently calls for promise cleanup
+        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
         asWebviewUri: test.mock.fn(uri => uri),
         postMessage: test.mock.fn(),
       };
       mockWebviewView = {
         webview: mockWebview,
-        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
+        // This is the onDidDispose that resolveWebviewView actually subscribes to
+        onDidDispose: test.mock.fn((callback) => { 
+          capturedWebviewViewOnDidDisposeCallback = callback; // Capture this callback
+          return { dispose: test.mock.fn() };
+        }), 
         show: test.mock.fn(),
         visible: true,
       };
@@ -352,9 +354,10 @@ test.describe('webPreviewer runExtension', () => {
       const promise_before_disposal = createWorkerIframeReadyPromise();
       
       resolveWebviewView(mockWebviewView, {}, null);
-      assert.ok(typeof capturedOnDidDisposeCallback === 'function', 'onDidDispose callback should have been captured');
+      // Check that the callback from webviewView.onDidDispose was captured
+      assert.ok(typeof capturedWebviewViewOnDidDisposeCallback === 'function', 'webviewView.onDidDispose callback should have been captured');
 
-      capturedOnDidDisposeCallback();
+      capturedWebviewViewOnDidDisposeCallback(); // Call the captured callback
 
       const promise_after_dispose1 = createWorkerIframeReadyPromise();
       assert.ok(promise_after_dispose1, 'New promise should be creatable after disposal');
@@ -367,8 +370,9 @@ test.describe('webPreviewer runExtension', () => {
       await new Promise(resolve => setImmediate(resolve));
       assert.strictEqual(p1Resolved, true, 'Newly created promise (p1) after disposal should resolve');
 
-      assert.ok(typeof capturedOnDidDisposeCallback === 'function', 'onDidDispose callback should still be valid');
-      capturedOnDidDisposeCallback();
+      // Check again if the callback is still considered a function (it should be, it's the same mock)
+      assert.ok(typeof capturedWebviewViewOnDidDisposeCallback === 'function', 'webviewView.onDidDispose callback should still be valid for a second call');
+      capturedWebviewViewOnDidDisposeCallback(); // Call it again
 
       const promise_after_dispose2 = createWorkerIframeReadyPromise();
       assert.ok(promise_after_dispose2, 'Another new promise should be creatable after second disposal');

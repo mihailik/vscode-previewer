@@ -7,14 +7,6 @@ function webPreviewer() {
 
   const HASH_CHAR_LENGTH = 8;
 
-  console.log('webPreviewer()', {
-    module: typeof module,
-    'module.exports': typeof module === 'undefined' ? 'undefined' : typeof module.exports,
-    process: typeof process == 'undefined' ? undefined : process,
-    window: typeof window == 'undefined' ? undefined : window,
-    self: typeof self == 'undefined' ? undefined : self
-  });
-
   if (typeof module !== 'undefined' && module?.exports) {
     runExtension(module.exports);
     if (typeof require === 'function' &&
@@ -26,11 +18,15 @@ function webPreviewer() {
         signData,
         generateSigningKeyPair
       });
+    } else {
+      console.log('webPreviewer:runExtension');
     }
   } else if (typeof window !== 'undefined' && typeof window?.alert === 'function') {
     if (typeof window['acquireVsCodeApi'] === 'function') {
+      console.log('webPreviewer:runWebView');
       return runWebView();
     } else {
+      console.log('webPreviewer:runRemoteExecutor');
       runRemoteExecutor();
     }
   }
@@ -53,7 +49,9 @@ function webPreviewer() {
 
     // This promise will be resolved by the runtimeFrameViewProvider when the iframe is loaded.
     // It allows other parts of the extension to await the iframe's readiness.
+    /** @type {Promise<import('vscode').Webview> | undefined | null} */
     let workerIframeReadyPromise = null;
+    /** @type {((script: string) => Promise<any>) | undefined | null} */
     let resolveWorkerIframeReady = null;
     let rejectWorkerIframeReady = null;
 
@@ -70,7 +68,7 @@ function webPreviewer() {
      * }} context 
      */
     async function activate(context) {
-      console.log('webPreviewer:activate (Worker Scope)');
+      console.log('webPreviewer:runExtension:activate');
 
       const vscode = context?.overrides?.vscode || require('vscode');
 
@@ -79,7 +77,7 @@ function webPreviewer() {
 
       [{ publicStr, publicHash }] = [await generateSigningKeyPair(context?.overrides?.crypto || crypto)];
 
-      console.log('Worker Host Script: Loading IFRAME for ', { publicStr, publicHash, vscode });
+      console.log('webPreviewer:runExtension:activate: Loading IFRAME for ', { publicStr, publicHash, vscode });
 
       createWorkerIframeReadyPromise(); // Initialize it
 
@@ -90,9 +88,9 @@ function webPreviewer() {
           webPreviewerStr + '.previewDocumentAsHtml',
           async (documentOrUri) => {
             try {
-              console.log('Preview command: Ensuring worker iframe is ready...');
+              console.log('webPreviewer:runExtension:previewDocumentAsHtml: Ensuring worker iframe is ready...');
               await ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
-              console.log('Preview command: Worker iframe should be ready.');
+              console.log('webPreviewer:runExtension:previewDocumentAsHtml: Worker iframe should be ready.');
             } catch (e) {
               console.error("Failed to ensure worker iframe for preview:", e);
               vscode.window.showErrorMessage("Background worker iframe failed to load. Preview might not work correctly.");
@@ -189,12 +187,12 @@ function webPreviewer() {
       context.subscriptions.push(
         vscode.window.onDidOpenTerminal(
           async (terminal) => {
-            console.log('A terminal was opened:', terminal.name, 'Ensuring worker iframe is ready...');
+            console.log('webPreviewer:runExtension: A terminal was opened:', terminal.name, 'Ensuring worker iframe is ready...');
             try {
               await ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
-              console.log('Terminal open: Worker iframe should be ready.');
+              console.log('webPreviewer:runExtension: Terminal open: Worker iframe should be ready.');
             } catch (e) {
-              console.error("Failed to ensure worker iframe on terminal open:", e);
+              console.error("webPreviewer:runExtension: Failed to ensure worker iframe on terminal open:", e);
               vscode.window.showErrorMessage("Background worker iframe failed to load.");
               // Reset promise for potential retry
               workerIframeReadyPromise = null;
@@ -251,7 +249,7 @@ function webPreviewer() {
             }
           }
 
-          console.log('HTML Preview Injector');
+          console.log('embeddedCode:HTML Preview Injector');
           window.alert = alert;
           detectTitleChange();
         };
@@ -260,7 +258,7 @@ function webPreviewer() {
       /** @param {import('vscode').TextDocument | import('vscode').Uri} documentOrUri */
       function openDocumentOrUriAsHtml(documentOrUri) {
         // ensureHiddenFrameViewIsResolved(); // Called by the command wrapper now
-        console.log('previewDocumentAsHtml:openDocumentOrUriAsHtml...');
+        console.log('webPreviewer:runExtension:previewDocumentAsHtml:openDocumentOrUriAsHtml...');
         if (!documentOrUri) {
           if (vscode.window.activeTextEditor?.document.languageId === 'html')
             return openDocumentAsHtml(vscode.window.activeTextEditor.document);
@@ -352,7 +350,7 @@ function webPreviewer() {
       // Helper function to ensure the WebviewView is resolved by revealing it.
       // This WILL cause the view to expand if collapsed.
       function ensureRuntimeFrameViewIsResolvedAndLoadsIframe() {
-        console.log('Attempting to reveal RuntimeFrameView to load worker iframe...');
+        console.log('webPreviewer:runExtension: Attempting to reveal RuntimeFrameView to load worker iframe...');
         vscode.commands.executeCommand(runtimeFrameViewId + '.focus');
         return workerIframeReadyPromise; // Return the promise for callers to await
       }
@@ -360,7 +358,7 @@ function webPreviewer() {
 
     /** @type {import('vscode').WebviewViewProvider['resolveWebviewView']} */
     function resolveWebviewView(webviewView, _context, _token) {
-      console.log('runtimeFrameViewProvider.resolveWebviewView (DOM context available here)');
+      console.log('webPreviewer:runExtension: runtimeFrameViewProvider.resolveWebviewView (DOM context available here)');
       webviewView.webview.options = {
         enableScripts: true,
         // localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')]
@@ -389,22 +387,42 @@ function webPreviewer() {
         </html>`;
       webviewView.webview.html = runtimeFrameHTML;
 
-      webviewView.webview.onDidReceiveMessage(message => {
-        if (message.command === 'workerIframeReady') {
-          console.log('Extension Worker: Received workerIframeReady from webview.');
-          if (resolveWorkerIframeReady) resolveWorkerIframeReady();
-        } else if (message.command === 'workerIframeError') {
-          console.error('Extension Worker: Received workerIframeError from webview:', message.error);
-          if (rejectWorkerIframeReady) rejectWorkerIframeReady(new Error(message.error));
-        }
-      });
+      webviewView.webview.onDidReceiveMessage(handleInit);
 
       webviewView.onDidDispose(() => {
         workerIframeReadyPromise = null;
         resolveWorkerIframeReady = null;
         rejectWorkerIframeReady = null;
       });
+
+      function handleInit(message) {
+        if (message.command === 'workerIframeReady') {
+          console.log('webPreviewer:runExtension: Received workerIframeReady from webview.');
+          if (resolveWorkerIframeReady) resolveWorkerIframeReady(webviewView.webview);
+        } else if (message.command === 'workerIframeError') {
+          console.error('webPreviewer:runExtension: Received workerIframeError from webview:', message.error);
+          if (rejectWorkerIframeReady) rejectWorkerIframeReady(new Error(message.error));
+        }
+      }
     }
+
+    // function createExecuteMessageSender() {
+
+    //   /** @type {{ [tag: string]: { resolve: (value: any) => void, reject: (reason?: any) => void } }} */
+    //   const handlersByTag = {};
+
+    //   return {
+    //     handlersByTag,
+    //     handleMessage,
+    //     sendMessage
+    //   };
+
+    //   function handleMessage(msg) {
+    //   }
+
+    //   function sendMessage(msg) {
+    //   }
+    // }
 
     function createWorkerIframeReadyPromise() {
       if (!workerIframeReadyPromise) {
@@ -445,12 +463,22 @@ function webPreviewer() {
       const iframe = await createIFRAME({ src: iframeSrc });
       const initTag = 'INIT_WORKER_HOST_' + Date.now();
 
+      window.addEventListener('message', handleInitResponse);
+
       iframe.contentWindow?.postMessage(
         { tag: initTag, init: { publicKey: publicStr, hash: publicHash } },
         iframeSrc
       );
 
-      dispatchMessages(iframe);
+      function handleInitResponse(evt) {
+        if (evt.data?.tag === initTag && evt.source === iframe.contentWindow) {
+          window.removeEventListener('message', handleInitResponse);
+          console.log('webPreviewer:runWebView: IFRAME LOAD COMPLETE');
+          vscode.postMessage({ command: 'workerIframeReady' });
+
+          dispatchMessages(iframe);
+        }
+      }
     }
 
     /** @param {HTMLIFrameElement} iframe */
