@@ -18,7 +18,7 @@ function webPreviewer() {
   if (typeof module !== 'undefined' && module?.exports) {
     runExtension(module.exports);
     if (typeof require === 'function' &&
-      typeof process !== undefined && typeof process?.arch === 'string') {
+      typeof process !== 'undefined' && typeof process?.arch === 'string') {
       // export tests
       runWebView(module.exports);
       runRemoteExecutor(module.exports);
@@ -65,7 +65,7 @@ function webPreviewer() {
      * @param {import('vscode').ExtensionContext & {
      *  overrides?: {
      *    vscode?: typeof import('vscode'),
-     *    crypto?: typeof useCrypto
+     *    crypto?: typeof crypto
      *  }
      * }} context 
      */
@@ -358,6 +358,7 @@ function webPreviewer() {
       }
     } // End of activate
 
+    /** @type {import('vscode').WebviewViewProvider['resolveWebviewView']} */
     function resolveWebviewView(webviewView, _context, _token) {
       console.log('runtimeFrameViewProvider.resolveWebviewView (DOM context available here)');
       webviewView.webview.options = {
@@ -379,10 +380,11 @@ function webPreviewer() {
         </head>
         <body>
             <h2>Worker Iframe Host</h2>
-            <script>${webPreviewer};
+            <${'script'}>${webPreviewer};
             var __publicHash = ${JSON.stringify(publicHash)};
+            var __publicStr = ${JSON.stringify(publicStr)};
             webPreviewer();
-            </script>
+            </${'script'}>
         </body>
         </html>`;
       webviewView.webview.html = runtimeFrameHTML;
@@ -397,7 +399,7 @@ function webPreviewer() {
         }
       });
 
-      webviewView.webview.onDidDispose(() => {
+      webviewView.onDidDispose(() => {
         workerIframeReadyPromise = null;
         resolveWorkerIframeReady = null;
         rejectWorkerIframeReady = null;
@@ -453,25 +455,13 @@ function webPreviewer() {
 
     /** @param {HTMLIFrameElement} iframe */
     function dispatchMessages(iframe) {
-      // Get vscode instance here, so it's fresh for each call to dispatchMessages,
-      // or at least within the context of runWebView's execution.
-      // @ts-ignore
-      const localVsCode = typeof window !== 'undefined' && typeof window.acquireVsCodeApi === 'function' 
-                          // @ts-ignore
-                          ? window.acquireVsCodeApi() 
-                          : (typeof vscode !== 'undefined' ? vscode : undefined);
-
       window.addEventListener('message', handleMessage);
 
       /** @param {MessageEvent} evt */
       async function handleMessage(evt) {
         // messages will come either from the parent window, or from the child iframe
         if (evt.source === iframe.contentWindow) {
-          if (localVsCode && typeof localVsCode.postMessage === 'function') {
-            localVsCode.postMessage(evt.data);
-          } else {
-            // console.error('vscode.postMessage is not available in dispatchMessages');
-          }
+          vscode.postMessage(evt.data);
         } else {
           iframe.contentWindow?.postMessage(evt.data);
         }
