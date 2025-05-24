@@ -364,6 +364,8 @@ function webPreviewer() {
         // localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')]
       };
 
+      const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
+
       // This HTML will run in the webview's document context
       // It is responsible for creating the -ifrwrk.iframe.live
       const runtimeFrameHTML =
@@ -379,8 +381,7 @@ function webPreviewer() {
         <body>
             <h2>Worker Iframe Host</h2>
             <${'script'}>${webPreviewer};
-            var __publicHash = ${JSON.stringify(publicHash)};
-            var __publicStr = ${JSON.stringify(publicStr)};
+            var __url = ${JSON.stringify(iframeSrc)};
             webPreviewer();
             </${'script'}>
         </body>
@@ -395,9 +396,16 @@ function webPreviewer() {
         rejectWorkerIframeReady = null;
       });
 
-      function handleInit(message) {
+      async function handleInit(message) {
         if (message.command === 'workerIframeReady') {
           console.log('webPreviewer:runExtension: Received workerIframeReady from webview.');
+
+          const initTag = 'webPreviewer:runExtension:init:' + (Date.now() + Math.random()).toString(36);
+          webviewView.webview.postMessage({
+            tag: initTag,
+            init: { publicKey: publicStr, hash: publicHash },
+        });
+
           if (resolveWorkerIframeReady) resolveWorkerIframeReady(webviewView.webview);
         } else if (message.command === 'workerIframeError') {
           console.error('webPreviewer:runExtension: Received workerIframeError from webview:', message.error);
@@ -456,28 +464,14 @@ function webPreviewer() {
     init();
 
     async function init() {
-
-      const publicStr = window['__publicStr'];
-      const publicHash = window['__publicHash'];
-      const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
-      const iframe = await createIFRAME({ src: iframeSrc });
-      const initTag = 'INIT_WORKER_HOST_' + Date.now();
-
-      window.addEventListener('message', handleInitResponse);
-
-      iframe.contentWindow?.postMessage(
-        { tag: initTag, init: { publicKey: publicStr, hash: publicHash } },
-        iframeSrc
-      );
-
-      function handleInitResponse(evt) {
-        if (evt.data?.tag === initTag && evt.source === iframe.contentWindow) {
-          window.removeEventListener('message', handleInitResponse);
-          console.log('webPreviewer:runWebView: IFRAME LOAD COMPLETE');
-          vscode.postMessage({ command: 'workerIframeReady' });
-
-          dispatchMessages(iframe);
-        }
+      const url = window['__url'];
+      const iframeSrc = url;
+      try {
+        const iframe = await createIFRAME({ src: iframeSrc });
+        dispatchMessages(iframe);
+        vscode.postMessage({ command: 'workerIframeReady' });
+      } catch (error) {
+        vscode.postMessage({ command: 'workerIframeError', error: error.message || 'Unknown error during iframe setup' });
       }
     }
 
