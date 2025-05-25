@@ -35,7 +35,10 @@ has access to many VSCode APIs.
 Hosted inside a small web view, in a side panel called Runtime.
 VSCode uses IFRAME for such web views.
 This web view is there to host another IFRAME , this time external
-on https://iframe.live site.
+on https://iframe.live site, which provides execution environment for the terminals.
 * **html**<br>
 Web view hosted inside top a document tab in VSCode, used to show
-preview of HTML content.
+preview of HTML content. The web view hosts two IFRAMEs:
+one to negotiate the file content, and another to host the actual HTML content.
+* **remoteAgent**<br>
+Running all the way inside https://iframe.live site and executing terminal requests.

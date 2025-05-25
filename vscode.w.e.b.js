@@ -21,7 +21,7 @@ function webPreviewer(environment) {
     case 'test':
       runExtension(module.exports);
       runWebViewProxy(module.exports);
-      runRemoteExecutor(module.exports);
+      runRemoteAgent(module.exports);
       Object.assign(module.exports, { // Changed from Object.apply to Object.assign
         signData,
         generateSigningKeyPair,
@@ -41,8 +41,8 @@ function webPreviewer(environment) {
       runWebViewHtml(environment.replace(/^html\:/, ''));
       break;
 
-    case 'remoteExecutor':
-      runRemoteExecutor();
+    case 'remoteAgent':
+      runRemoteAgent();
       break;
 
     default:
@@ -67,7 +67,7 @@ function webPreviewer(environment) {
 
     // This promise will be resolved by the runtimeFrameViewProvider when the iframe is loaded.
     // It allows other parts of the extension to await the iframe's readiness.
-    /** @type {Promise<import('vscode').Webview> | undefined | null} */
+    /** @type {Promise<(script: string) => Promise<any>> | undefined | null} */
     let workerIframeReadyPromise = null;
     /** @type {((script: string) => Promise<any>) | undefined | null} */
     let resolveWorkerIframeReady = null;
@@ -106,8 +106,6 @@ function webPreviewer(environment) {
           previewDocumentAsHtml
         ));
 
-      // Register command to open a JS terminal instance
-      // This command is already declared in your package.json
       context.subscriptions.push(
         vscode.commands.registerCommand(
           webPreviewerStr + '.openJsTerminal',
@@ -119,8 +117,6 @@ function webPreviewer(environment) {
           })
       );
 
-      // Register Terminal Profile Provider
-      // This makes "Custom JS REPL" an option in the terminal creation dropdown
       context.subscriptions.push(
         vscode.window.registerTerminalProfileProvider(
           webPreviewerStr + '.jsTerminal',
@@ -137,7 +133,6 @@ function webPreviewer(environment) {
           })
       );
 
-      // Listen for any terminal being opened
       context.subscriptions.push(
         vscode.window.onDidOpenTerminal(
           async (terminal) => {
@@ -154,7 +149,6 @@ function webPreviewer(environment) {
             }
           }),
       );
-      // --- End JS Terminal Logic ---
 
       context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(
@@ -166,7 +160,7 @@ function webPreviewer(environment) {
             }
           })
       );
-    } // End of activate
+    }
 
 
     /**
@@ -344,22 +338,12 @@ function webPreviewer(environment) {
       const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
 
       webviewView.webview.html =
-        `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https:; script-src 'unsafe-inline' ${webviewView.webview.cspSource}; style-src 'unsafe-inline' ${webviewView.webview.cspSource};">
-    <title>Runtime Worker Host</title>
-    <style> body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; border:none; } </style>
-</head>
-<body>
-    <h2>PROXY IFRAME</h2>
-    <${'script'}>${webPreviewer};
-    webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
-    </${'script'}>
-</body>
-</html>`;
+`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https:; script-src 'unsafe-inline' ${webviewView.webview.cspSource}; style-src 'unsafe-inline' ${webviewView.webview.cspSource};">
+<style> body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; border:none; } </style>
+<h2>PROXY IFRAME</h2>
+<${'script'}>${webPreviewer};
+webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
+</${'script'}>`;
 
       webviewView.webview.onDidReceiveMessage(handleInit);
 
@@ -537,7 +521,7 @@ function webPreviewer(environment) {
   /**
    * @param {Record<string, any>} [exports]
    */
-  function runRemoteExecutor(exports) {
+  function runRemoteAgent(exports) {
   }
 
   async function generateSigningKeyPair(cryptoOverride) {
