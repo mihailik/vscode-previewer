@@ -286,7 +286,14 @@ function webPreviewer(environment) {
       const resolvedUri =
         panel.webview.asWebviewUri(document.uri);
 
-      const injectCustom = '<base href="' + resolvedUri + '"><' + 'script' + '>(' + embeddedCode + ')()</' + 'script' + '>';
+      const injectCustom =
+`
+<${'script'}>
+${webPreviewer}
+webPreviewer();
+</${'script'}>
+`;
+
       let htmlInjectBase = html.replace(/<head[^>]*>/, str => str + injectCustom);
       if (htmlInjectBase === html)
         htmlInjectBase = html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectCustom);
@@ -444,52 +451,6 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
         } else {
           iframe.contentWindow?.postMessage(evt.data);
         }
-      }
-    }
-
-    async function initWorkerHost() {
-      try {
-        const iframe = document.createElement('iframe');
-        const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
-        iframe.src = iframeSrc;
-        iframe.allow = 'cross-origin-embedder-policy; cross-origin-opener-policy; cross-origin-resource-policy; cross-origin-isolated;';
-        // iframe.style.cssText = 'width:200px; height: 200px; border:none; position:absolute; top:-190px; left:-190px; opacity:0.01; pointer-events:none;';
-
-        document.body.appendChild(iframe);
-
-        await new Promise((resolve, reject) => {
-          iframe.onload = () => {
-            iframe.onload = null; iframe.onerror = null;
-            console.log('Worker Host Script: Remote IFRAME channel negotiation...');
-            const initTag = 'INIT_WORKER_HOST_' + Date.now();
-
-            const messageHandler = (e) => {
-              if (e.source === iframe.contentWindow && e.data?.tag === initTag) {
-                window.removeEventListener('message', messageHandler);
-                console.log('Worker Host Script: IFRAME LOAD COMPLETE');
-                vscode.postMessage({ command: 'workerIframeReady' });
-                resolve();
-              }
-            };
-            window.addEventListener('message', messageHandler);
-
-            iframe.contentWindow?.postMessage(
-              { tag: initTag, init: { publicKey: publicStr, hash: publicHash } },
-              iframeSrc
-            );
-          };
-          iframe.onerror = (err) => {
-            iframe.onload = null; iframe.onerror = null;
-            console.error('Worker Host Script: Failed to load worker iframe:', iframeSrc, err);
-            vscode.postMessage({ command: 'workerIframeError', error: 'Failed to load worker iframe: ' + iframeSrc });
-            reject(new Error('Failed to load worker iframe'));
-          };
-        });
-        console.log('Worker Host Script: IFRAME fully loaded and initialized.');
-
-      } catch (error) {
-        console.error('Worker Host Script: Error during iframe setup:', error);
-        vscode.postMessage({ command: 'workerIframeError', error: error.message || 'Unknown error during iframe setup' });
       }
     }
   }

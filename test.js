@@ -93,7 +93,25 @@ test.describe('webPreviewer runExtension', () => {
         executeCommand: test.mock.fn(() => Promise.resolve()),
       },
       window: {
-        createWebviewPanel: test.mock.fn(),
+        createWebviewPanel: test.mock.fn(() => ({
+          onDidDispose: test.mock.fn((disposeCallback) => {
+            return { dispose: test.mock.fn() };
+          }),
+          webview: {
+            html: '',
+            options: {},
+            onDidReceiveMessage: test.mock.fn((messageCallback) => {
+              return { dispose: test.mock.fn() };
+            }),
+            asWebviewUri: test.mock.fn(uri => uri),
+            postMessage: test.mock.fn(),
+            cspSource: 'mock-panel-csp-source',
+          },
+          reveal: test.mock.fn(),
+          visible: false,
+          title: 'Initial Panel Title',
+          dispose: test.mock.fn(),
+        })),
         createTerminal: test.mock.fn(() => ({
           show: test.mock.fn(),
           dispose: test.mock.fn(),
@@ -317,7 +335,7 @@ test.describe('webPreviewer runExtension', () => {
       assert.ok(resolveWebviewView, "resolveWebviewView should be loaded");
       resolveWebviewView(mockWebviewView, {}, null);
       assert.strictEqual(mockWebview.options.enableScripts, true);
-      assert.ok(mockWebview.html.includes('Worker Iframe Host'));
+      assert.ok(mockWebview.html.includes('PROXY IFRAME')); // Changed from 'Worker Iframe Host'
       // publicHash is faked by producing a predefined digest in the mock crypto above
       assert.ok(mockWebview.html.includes('tso86l'), `HTML should include the mocked publicHash: ${MOCK_PUBLIC_HASH}`);
     });
