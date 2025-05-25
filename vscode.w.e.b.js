@@ -22,7 +22,7 @@ function webPreviewer(environment) {
       runExtension(module.exports);
       runWebViewProxy(module.exports);
       runRemoteAgent(module.exports);
-      Object.assign(module.exports, { // Changed from Object.apply to Object.assign
+      Object.assign(module.exports, {
         signData,
         generateSigningKeyPair,
         createIFRAME
@@ -34,11 +34,11 @@ function webPreviewer(environment) {
       break;
 
     case 'proxy':
-      runWebViewProxy(environment.replace(/^proxy\:/, ''));
+      runWebViewProxy(environment.replace(/^proxy:/, ''));
       break;
 
     case 'html':
-      runWebViewHtml(environment.replace(/^html\:/, ''));
+      runWebViewHtml(environment.replace(/^html:/, ''));
       break;
 
     case 'remoteAgent':
@@ -57,20 +57,21 @@ function webPreviewer(environment) {
     Object.assign(exports, {
       activate,
       deactivate,
-      runExtension: {
+      runExtension: { 
         resolveWebviewView,
-        createWorkerIframeReadyPromise
+        createWorkerIframeReadyPromise,
       }
     });
 
-    let publicStr, publicHash;
+    let publicStr, publicHash, privateKey;
+    const commandCompletionHandlers = new Map();
 
-    // This promise will be resolved by the runtimeFrameViewProvider when the iframe is loaded.
-    // It allows other parts of the extension to await the iframe's readiness.
-    /** @type {Promise<(script: string) => Promise<any>> | undefined | null} */
+
+    /** @type {Promise<import('vscode').Webview | undefined | null> | undefined | null} */
     let workerIframeReadyPromise = null;
-    /** @type {((script: string) => Promise<any>) | undefined | null} */
+    /** @type {((value: import('vscode').Webview | undefined | null | PromiseLike<import('vscode').Webview | undefined | null>) => void) | undefined | null} */
     let resolveWorkerIframeReady = null;
+    /** @type {((reason?: any) => void) | undefined | null} */
     let rejectWorkerIframeReady = null;
 
     /** @type {import('vscode')} */
@@ -80,7 +81,6 @@ function webPreviewer(environment) {
     const documentPanels = {};
 
     function deactivate() {
-      // nothing
     }
 
     /**
@@ -95,8 +95,11 @@ function webPreviewer(environment) {
       console.log('webPreviewer:runExtension:activate');
 
       vscode = context?.overrides?.vscode || require('vscode');
-
-      [{ publicStr, publicHash }] = [await generateSigningKeyPair(context?.overrides?.crypto || crypto)];
+      const currentCrypto = context?.overrides?.crypto || crypto;
+      const keys = await generateSigningKeyPair(currentCrypto);
+      publicStr = keys.publicStr;
+      publicHash = keys.publicHash;
+      privateKey = keys.privateKey;
 
       console.log('webPreviewer:runExtension:activate: Loading IFRAME for ', { publicStr, publicHash, vscode });
 
@@ -110,10 +113,9 @@ function webPreviewer(environment) {
         vscode.commands.registerCommand(
           webPreviewerStr + '.openJsTerminal',
           () => {
-            const pty = createJsReplPty("Command"); // Creates a new PTY instance each time
+            const pty = createJsReplPty("Command");
             const terminal = vscode.window.createTerminal({ name: 'JS Terminal', pty: pty });
             terminal.show();
-            // ensureHiddenFrameViewIsResolved(); // Also ensure it's resolved when our custom terminal opens
           })
       );
 
@@ -122,7 +124,6 @@ function webPreviewer(environment) {
           webPreviewerStr + '.jsTerminal',
           {
             provideTerminalProfile: (token) => {
-              // Each new terminal created from the profile selection gets its own pty instance
               const pty = createJsReplPty("Profile");
               return new vscode.TerminalProfile({
                 name: 'Custom JS REPL',
@@ -143,9 +144,7 @@ function webPreviewer(environment) {
             } catch (e) {
               console.error("webPreviewer:runExtension: Failed to ensure worker iframe on terminal open:", e);
               vscode.window.showErrorMessage("Background worker iframe failed to load.");
-              // Reset promise for potential retry
               workerIframeReadyPromise = null;
-              createWorkerIframeReadyPromise();
             }
           }),
       );
@@ -164,48 +163,69 @@ function webPreviewer(environment) {
 
 
     /**
-     * Creates a new Pseudoterminal instance for a simple JS REPL.
-     * @param {string} [terminalTypeName='JS'] - Name to display in the initial message.
+     * @param {string} [terminalTypeName='JS']
      * @returns {import('vscode').Pseudoterminal}
      */
     function createJsReplPty(terminalTypeName = 'JS') {
       const writeEmitter = new vscode.EventEmitter();
-      let commandLine = ""; // Buffer for the current line of input
+      let commandLine = "";
 
       return {
         onDidWrite: writeEmitter.event,
         open: () => {
           commandLine = "";
-          writeEmitter.fire(`${terminalTypeName} Terminal Started\r\n> `);
+          writeEmitter.fire(terminalTypeName + ' Terminal Started\r\n> ');
         },
-        close: () => { /* Nothing to do */ },
-        handleInput: data => {
-          if (data === '\r') { // Enter key
-            writeEmitter.fire('\r\n'); // Echo newline
-            if (commandLine.trim()) {
-              let output;
-              try {
-                // Unsafe eval: Be very careful with this in a real extension.
-                // Consider sandboxing or a safer execution environment.
-                output = String(eval(commandLine));
-              } catch (e) {
-                output = `Error: ${e.message}`;
-              }
-              writeEmitter.fire(`${output}\r\n`);
-            }
+        close: () => { },
+        handleInput: async data => {
+          if (data === '\r') {
+            writeEmitter.fire('\r\n');
+            const currentCommand = commandLine.trim();
             commandLine = "";
+
+            if (currentCommand) {
+              try {
+                if (!workerIframeReadyPromise) {
+                    writeEmitter.fire('Error: Worker iframe not initialized. Please try opening the "Web Previewer Runtime" view or reopening the terminal.\r\n> ');
+                    return;
+                }
+                const proxyWebview = await workerIframeReadyPromise; 
+                if (!proxyWebview) {
+                  throw new Error("Proxy webview not available after promise resolution.");
+                }
+
+                const tag = 'exec_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+                const signature = await signData(privateKey, currentCommand);
+
+                proxyWebview.postMessage({
+                    tag: tag,
+                    execute: {
+                        script: currentCommand,
+                        signature: signature
+                    }
+                });
+
+                const resultPromise = new Promise((resolve, reject) => {
+                    commandCompletionHandlers.set(tag, { resolve, reject });
+                });
+
+                const output = await resultPromise;
+                writeEmitter.fire(output + '\r\n');
+
+              } catch (e) {
+                writeEmitter.fire('Error: ' + e.message + '\r\n');
+              }
+            }
             writeEmitter.fire('> ');
-          } else if (data === '\x7f') { // Backspace
+          } else if (data === '\x7f') {
             if (commandLine.length > 0) {
               commandLine = commandLine.slice(0, -1);
-              writeEmitter.fire('\b \b'); // Move cursor back, erase char, move cursor back
+              writeEmitter.fire('\b \b');
             }
-          } else if (data >= ' ' && data <= '~') { // Printable characters
+          } else if (data >= ' ' && data <= '~') {
             commandLine += data;
-            writeEmitter.fire(data); // Echo character
+            writeEmitter.fire(data);
           } else {
-            // Echo other non-printable/non-backspace characters (e.g., arrow keys)
-            // but don't add to commandLine or process further for this simple terminal.
             writeEmitter.fire(data);
           }
         }
@@ -220,16 +240,13 @@ function webPreviewer(environment) {
       } catch (e) {
         console.error("Failed to ensure worker iframe for preview:", e);
         vscode.window.showErrorMessage("Background worker iframe failed to load. Preview might not work correctly.");
-        // Reset promise for potential retry
         workerIframeReadyPromise = null;
-        createWorkerIframeReadyPromise();
       }
       openDocumentOrUriAsHtml(documentOrUri);
     }
 
     /** @param {import('vscode').TextDocument | import('vscode').Uri} documentOrUri */
     function openDocumentOrUriAsHtml(documentOrUri) {
-      // ensureHiddenFrameViewIsResolved(); // Called by the command wrapper now
       console.log('webPreviewer:runExtension:previewDocumentAsHtml:openDocumentOrUriAsHtml...');
       if (!documentOrUri) {
         if (vscode.window.activeTextEditor?.document.languageId === 'html')
@@ -282,13 +299,8 @@ function webPreviewer(environment) {
      */
     function showInPanel(document, panel) {
       const html = document.getText();
-
-      const resolvedUri =
-        panel.webview.asWebviewUri(document.uri);
-
       const injectCustom =
-`
-<${'script'}>
+`<${'script'}>
 ${webPreviewer}
 webPreviewer();
 </${'script'}>
@@ -315,23 +327,22 @@ webPreviewer();
         if ('alert' in msg) {
           vscode.window.showInformationMessage(msg.alert);
         }
-
         if ('title' in msg) {
           panel.title = msg.title || document.fileName;
         }
-
         if ('error' in msg) {
           vscode.window.showErrorMessage(msg.error);
         }
       }
     }
 
-    // Helper function to ensure the WebviewView is resolved by revealing it.
-    // This WILL cause the view to expand if collapsed.
     function ensureRuntimeFrameViewIsResolvedAndLoadsIframe() {
       console.log('webPreviewer:runExtension: Attempting to reveal RuntimeFrameView to load worker iframe...');
+      if (!workerIframeReadyPromise) {
+        createWorkerIframeReadyPromise();
+      }
       vscode.commands.executeCommand(runtimeFrameViewId + '.focus');
-      return workerIframeReadyPromise; // Return the promise for callers to await
+      return workerIframeReadyPromise;
     }
 
     /** @type {import('vscode').WebviewViewProvider['resolveWebviewView']} */
@@ -339,20 +350,19 @@ webPreviewer();
       console.log('webPreviewer:runExtension: runtimeFrameViewProvider.resolveWebviewView (DOM context available here)');
       webviewView.webview.options = {
         enableScripts: true,
-        // localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')]
       };
 
       const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
 
       webviewView.webview.html =
-`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; frame-src https:; script-src 'unsafe-inline' ${webviewView.webview.cspSource}; style-src 'unsafe-inline' ${webviewView.webview.cspSource};">
-<style> body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; border:none; } </style>
+`<style> body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; border:none; } </style>
 <h2>PROXY IFRAME</h2>
-<${'script'}>${webPreviewer};
-webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
+<${'script'}>
+const webPreviewerFn = ${String(webPreviewer)};
+webPreviewerFn("proxy:" + ${JSON.stringify(JSON.stringify(iframeSrc))});
 </${'script'}>`;
 
-      webviewView.webview.onDidReceiveMessage(handleInit);
+      webviewView.webview.onDidReceiveMessage(handleProxyMessage);
 
       webviewView.onDidDispose(() => {
         workerIframeReadyPromise = null;
@@ -360,41 +370,50 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
         rejectWorkerIframeReady = null;
       });
 
-      async function handleInit(message) {
+      async function handleProxyMessage(message) {
         if (message.command === 'workerIframeReady') {
           console.log('webPreviewer:runExtension: Received workerIframeReady from webview.');
-
           const initTag = 'webPreviewer:runExtension:init:' + (Date.now() + Math.random()).toString(36);
           webviewView.webview.postMessage({
             tag: initTag,
             init: { publicKey: publicStr, hash: publicHash },
-        });
+          });
+
+          // After init, send the script to set up the remoteAgent
+          const remoteAgentSetupTag = 'webPreviewer:runExtension:remoteAgentSetup:' + (Date.now() + Math.random()).toString(36);
+          const scriptToRunInRemote = String(webPreviewer) + '\nwebPreviewer("remoteAgent");';
+          const signature = await signData(privateKey, scriptToRunInRemote);
+
+          webviewView.webview.postMessage({
+            tag: remoteAgentSetupTag,
+            execute: {
+                script: scriptToRunInRemote,
+                signature: signature
+            }
+          });
+          // We don't necessarily need to wait for this setup script to complete before resolving workerIframeReady,
+          // as subsequent execute calls will queue up if the remote isn't fully ready with evalWebPreviewer.
+          // However, if there's a specific confirmation needed from this setup, we might need a new message type.
 
           if (resolveWorkerIframeReady) resolveWorkerIframeReady(webviewView.webview);
         } else if (message.command === 'workerIframeError') {
           console.error('webPreviewer:runExtension: Received workerIframeError from webview:', message.error);
           if (rejectWorkerIframeReady) rejectWorkerIframeReady(new Error(message.error));
+        } else if (message.tag && commandCompletionHandlers.has(message.tag)) {
+            const handlerInfo = commandCompletionHandlers.get(message.tag);
+            if (message.executeSuccess) {
+                handlerInfo.resolve(message.executeSuccess);
+            } else if (message.executeError) {
+                handlerInfo.reject(new Error(message.executeError));
+            } else if (message.executeStart) {
+                // console.log(`Execution started for tag: ${message.tag}`);
+            }
+            if (message.executeSuccess || message.executeError) {
+                commandCompletionHandlers.delete(message.tag);
+            }
         }
       }
     }
-
-    // function createExecuteMessageSender() {
-
-    //   /** @type {{ [tag: string]: { resolve: (value: any) => void, reject: (reason?: any) => void } }} */
-    //   const handlersByTag = {};
-
-    //   return {
-    //     handlersByTag,
-    //     handleMessage,
-    //     sendMessage
-    //   };
-
-    //   function handleMessage(msg) {
-    //   }
-
-    //   function sendMessage(msg) {
-    //   }
-    // }
 
     function createWorkerIframeReadyPromise() {
       if (!workerIframeReadyPromise) {
@@ -405,27 +424,20 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
       }
       return workerIframeReadyPromise;
     }
-
   }
 
   /**
    * @param {string | Record<string, any>} exportsOrUrl
    */
   function runWebViewProxy(exportsOrUrl) {
-
     if (typeof exportsOrUrl !== 'string') {
       Object.assign(exportsOrUrl, {
-        runWebViewProxy: {
-          init,
-          dispatchMessages
-        }
       });
       return;
     }
 
     const url = exportsOrUrl;
-
-    const vscode = window['acquireVsCodeApi'](); // For communication back to extension worker if needed
+    const vscode = window['acquireVsCodeApi']();
 
     init();
 
@@ -435,6 +447,7 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
         dispatchMessages(iframe);
         vscode.postMessage({ command: 'workerIframeReady' });
       } catch (error) {
+        console.error("runWebViewProxy: Error creating or loading remote agent iframe:", error);
         vscode.postMessage({ command: 'workerIframeError', error: error.message || 'Unknown error during iframe setup' });
       }
     }
@@ -445,34 +458,34 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
 
       /** @param {MessageEvent} evt */
       async function handleMessage(evt) {
-        // messages will come either from the parent window, or from the child iframe
         if (evt.source === iframe.contentWindow) {
           vscode.postMessage(evt.data);
-        } else {
-          iframe.contentWindow?.postMessage(evt.data);
+        } else if (evt.source === window.parent) {
+          const messageToIframe = { ...evt.data };
+          if (messageToIframe.execute && typeof messageToIframe.execute === 'object' && !messageToIframe.execute.origin) {
+            messageToIframe.execute.origin = window.origin;
+          }
+          const remoteAgentOrigin = new URL(iframe.src).origin;
+          iframe.contentWindow?.postMessage(messageToIframe, remoteAgentOrigin);
         }
       }
     }
   }
 
   function runWebViewHtml(exportsOrUrl) {
-    if (typeof exportsOrUrl === 'string') {
+    if (typeof exportsOrUrl !== 'string') { 
       Object.assign(exportsOrUrl, {
-        runWebViewHtml: {
-          init
-        }
       });
       return;
     }
 
     const url = exportsOrUrl;
 
-    init()
+    init();
 
     async function init() {
       console.log('webPreviewer:runWebViewHtml');
-
-      const iframe = await createIFRAME({
+      const iframe = await createIFRAME({ 
         src: url,
         cssText: 'width:100%; height:100%; border:none; position:absolute; inset: 0;'
       });
@@ -483,36 +496,66 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
    * @param {Record<string, any>} [exports]
    */
   function runRemoteAgent(exports) {
+    console.log('webPreviewer:runRemoteAgent: Activating remote agent logic.');
+
+    /**
+     * @param {string} scriptToExecute
+     */
+    function evalWebPreviewer(scriptToExecute) {
+        console.log('webPreviewer:runRemoteAgent:evalWebPreviewer: Executing script:', scriptToExecute);
+        try {
+            // Using indirect eval to ensure execution in the global scope
+            const result = (0, eval)(scriptToExecute);
+            console.log('webPreviewer:runRemoteAgent:evalWebPreviewer: Script executed, result:', result);
+            return result;
+        } catch (error) {
+            console.error('webPreviewer:runRemoteAgent:evalWebPreviewer: Error executing script:', error);
+            // Let the error propagate to be caught by iframe.l.i.v.e.js's handler
+            throw error;
+        }
+    }
+
+    // Expose evalWebPreviewer on the global scope
+    if (typeof globalThis !== 'undefined') {
+        (globalThis )[ 'evalWebPreviewer'] = evalWebPreviewer;
+    } else if (typeof window !== 'undefined') {
+        (window )[ 'evalWebPreviewer'] = evalWebPreviewer;
+    } else if (typeof self !== 'undefined') {
+        // Handle environments like Web Workers if 'self' is the global
+        (self )[ 'evalWebPreviewer'] = evalWebPreviewer;
+    } else {
+        console.error('webPreviewer:runRemoteAgent: Could not find global scope to attach evalWebPreviewer.');
+    }
+    console.log('webPreviewer:runRemoteAgent: evalWebPreviewer is now on global scope.');
   }
+
 
   async function generateSigningKeyPair(cryptoOverride) {
     const useCrypto = cryptoOverride || crypto;
     const algorithm = { name: "HMAC", hash: "SHA-256" };
-    // generateKey for HMAC returns a CryptoKey directly
     const key = /** @type {CryptoKey} */ (await useCrypto.subtle.generateKey(algorithm, true, ["sign", "verify"]));
-    
     const rawKeyBuffer = await useCrypto.subtle.exportKey('raw', key);
     const publicStr = Array.from(new Uint8Array(rawKeyBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    
     const keyDigest = await useCrypto.subtle.digest('SHA-256', rawKeyBuffer);
-    // Taking first HASH_CHAR_LENGTH hex characters of the SHA-256 hash of the key for publicHash
-    const publicHash = Math.abs(new Uint32Array(keyDigest)[0]).toString(36).slice(-HASH_CHAR_LENGTH);
-
-    return { publicStr, publicHash, privateKey: key, publicKey: key }; // For HMAC, private and public CryptoKey are the same
+    let tempPublicHash = Math.abs(new Uint32Array(keyDigest)[0]).toString(36);
+    while(tempPublicHash.length < HASH_CHAR_LENGTH) {
+        tempPublicHash = '0' + tempPublicHash;
+    }
+    const publicHash = tempPublicHash.slice(-HASH_CHAR_LENGTH);
+    return { publicStr, publicHash, privateKey: key, publicKey: key };
   }
 
-  async function signData(privateKey, str) { // privateKey is the HMAC CryptoKey
-    const signatureBuffer = await crypto.subtle.sign({ name: "HMAC" }, privateKey, new TextEncoder().encode(str));
+  async function signData(privateKey, str, cryptoOverride) {
+    const useCrypto = cryptoOverride || crypto;
+    const signatureBuffer = await useCrypto.subtle.sign({ name: "HMAC" }, privateKey, new TextEncoder().encode(str));
     return Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-
-  /** @param {{ src: string, cssText?: string }} _ */
+  /** @param {{ src: string, cssText?: string }} params */
   function createIFRAME({ src, cssText }) {
     const iframe = document.createElement('iframe');
     iframe.src = src;
     iframe.allow = 'cross-origin-embedder-policy; cross-origin-opener-policy; cross-origin-resource-policy; cross-origin-isolated;';
-    // iframe.style.cssText = 'width:200px; height: 200px; border:none; position:absolute; top:-190px; left:-190px; opacity:0.01; pointer-events:none;';
     if (typeof cssText === 'string')
       iframe.style.cssText = cssText;
 
@@ -524,16 +567,13 @@ webPreviewer(${'proxy:' + JSON.stringify(iframeSrc)});
         iframe.removeEventListener('error', handleError);
         resolve(iframe);
       }
-
-      function handleError(event, source, lineno, colno, error) {
+      function handleError(eventOrMessage, source, lineno, colno, error) {
         iframe.removeEventListener('load', handleLoad);
         iframe.removeEventListener('error', handleError);
-        // Create a new Error object if the 'error' argument is not already one
-        const errorToReject = error instanceof Error ? error : new Error(event?.type || 'iframe load error');
-        Object.assign(errorToReject, { source, lineno, colno, event });
+        const errorToReject = error instanceof Error ? error : new Error(typeof eventOrMessage === 'string' ? eventOrMessage : (eventOrMessage?.type || 'iframe load error'));
+        Object.assign(errorToReject, { source, lineno, colno, event: typeof eventOrMessage !== 'string' ? eventOrMessage : undefined });
         reject(errorToReject);
       }
-
       iframe.addEventListener('load', handleLoad);
       iframe.addEventListener('error', handleError);
     });

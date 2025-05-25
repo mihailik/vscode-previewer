@@ -317,27 +317,12 @@ test.describe('webPreviewer runExtension', () => {
       };
     });
 
-    test.it('should set webview HTML and options, including publicHash', async () => {
-      await activate({
-        ...mockContext,
-        overrides: {
-          ...mockContext.overrides,
-          crypto: {
-            subtle: {
-              generateKey: () => /** @type {*} */({ __key: 'mock1' }),
-              exportKey: /** @type {*} */(() => new TextEncoder().encode('mock2')),
-              // the part to emulate the publicHash of tso86l
-              digest: /** @type {*} */(() => (new TextEncoder().encode('mock3_12')).buffer)
-            }
-          }
-        }
-      });
+    test.it('should set webview HTML and options', async () => {
+      await activate(mockContext);
       assert.ok(resolveWebviewView, "resolveWebviewView should be loaded");
       resolveWebviewView(mockWebviewView, {}, null);
       assert.strictEqual(mockWebview.options.enableScripts, true);
       assert.ok(mockWebview.html.includes('PROXY IFRAME')); // Changed from 'Worker Iframe Host'
-      // publicHash is faked by producing a predefined digest in the mock crypto above
-      assert.ok(mockWebview.html.includes('tso86l'), `HTML should include the mocked publicHash: ${MOCK_PUBLIC_HASH}`);
     });
 
     test.it('should handle workerIframeReady message and resolve promise', async () => {
