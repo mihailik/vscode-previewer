@@ -301,29 +301,16 @@ function webPreviewer(environment) {
      */
     function showInPanel(document, panel) {
       const html = document.getText();
-      const injectCustom =
-`<${'script'}>
-${webPreviewer}
-webPreviewer();
-</${'script'}>
-`;
 
-      let htmlInjectBase = html.replace(/<head[^>]*>/, str => str + injectCustom);
-      if (htmlInjectBase === html)
-        htmlInjectBase = html.replace(/<html[^>]*>|<head[^>]*>/, str => str + injectCustom);
-      if (htmlInjectBase === html)
-        htmlInjectBase = injectCustom + html;
+      const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live/iframe.l.i.v.e.html';
 
       panel.webview.onDidReceiveMessage(handleWebViewMessage);
 
-      if (panel.webview.html) {
-        panel.webview.html = '';
-        setTimeout(function () {
-          panel.webview.html = htmlInjectBase;
-        }, 100);
-      } else {
-        panel.webview.html = htmlInjectBase;
-      }
+      panel.webview.html =
+        `<${'script'}>
+${webPreviewer}
+webPreviewer(${JSON.stringify('html:' + iframeSrc)});
+</${'script'}>`;
 
       function handleWebViewMessage(msg) {
         if ('alert' in msg) {
@@ -354,7 +341,7 @@ webPreviewer();
         enableScripts: true,
       };
 
-      const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live';
+      const iframeSrc = 'https://' + publicHash + '-ifrwrk.iframe.live/iframe.l.i.v.e.html';
 
       webviewView.webview.html =
 `<style> body, html { margin:0; padding:0; width:100%; height:100%; overflow:hidden; border:none; } </style>
@@ -447,53 +434,41 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
       try {
         const iframe = await createIFRAME({ src: url });
         console.log('webPreviewer:runWebViewProxy: Created remote agent iframe:', iframe);
-        dispatchMessages(iframe);
+        dispatchMessages(iframe, vscode);
         vscode.postMessage({ command: 'workerIframeReady' });
       } catch (error) {
         console.error("runWebViewProxy: Error creating or loading remote agent iframe:", error);
         vscode.postMessage({ command: 'workerIframeError', error: error.message || 'Unknown error during iframe setup' });
       }
     }
-
-    /** @param {HTMLIFrameElement} iframe */
-    function dispatchMessages(iframe) {
-      window.addEventListener('message', handleMessage);
-
-      /** @param {MessageEvent} evt */
-      async function handleMessage(evt) {
-        if (evt.source === iframe.contentWindow) {
-          console.log('webPreviewer:runWebViewProxy: Received message from iframe:', evt.data); 
-          vscode.postMessage(evt.data);
-        } else if (evt.source === window.parent || evt.source?.['origin'] === window.origin) {
-          const messageToIframe = { ...evt.data };
-          if (messageToIframe.execute && typeof messageToIframe.execute === 'object' && !messageToIframe.execute.origin) {
-            messageToIframe.execute.origin = window.origin;
-          }
-          const remoteAgentOrigin = new URL(iframe.src).origin;
-          console.log('webPreviewer:runWebViewProxy: Forwarding message to iframe:', evt.data, '-->', messageToIframe);
-          iframe.contentWindow?.postMessage(messageToIframe, remoteAgentOrigin);
-        }
-      }
-    }
   }
 
   function runWebViewHtml(exportsOrUrl) {
-    if (typeof exportsOrUrl !== 'string') { 
+    if (typeof exportsOrUrl !== 'string') {
       Object.assign(exportsOrUrl, {
       });
       return;
     }
 
     const url = exportsOrUrl;
+    const vscode = window['acquireVsCodeApi']();
 
     init();
 
     async function init() {
       console.log('webPreviewer:runWebViewHtml');
-      const iframe = await createIFRAME({ 
-        src: url,
-        cssText: 'width:100%; height:100%; border:none; position:absolute; inset: 0;'
-      });
+      try {
+        const iframe = await createIFRAME({
+          src: url,
+          cssText: 'width:100%; height:100%; border:none; position:absolute; inset: 0;'
+        });
+          console.log('webPreviewer:runWebViewProxy: Created remote agent iframe:', iframe);
+        dispatchMessages(iframe, vscode);
+        vscode.postMessage({ command: 'workerIframeReady' });
+      } catch (error) {
+        console.error("runWebViewProxy: Error creating or loading remote agent iframe:", error);
+        vscode.postMessage({ command: 'workerIframeError', error: error.message || 'Unknown error during iframe setup' });
+      }
     }
   }
 
@@ -563,7 +538,10 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
   }
 
 
-  /** @param {{ src: string, cssText?: string }} params */
+  /**
+   * @param {{ src: string, cssText?: string }} params
+   * @returns {Promise<HTMLIFrameElement>}
+   */
   function createIFRAME({ src, cssText }) {
     const iframe = document.createElement('iframe');
     iframe.src = src;
@@ -589,6 +567,30 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
       iframe.addEventListener('load', handleLoad);
       iframe.addEventListener('error', handleError);
     });
+  }
+
+  /**
+   * @param {HTMLIFrameElement} iframe
+   * @param {{ postMessage(msgData: any) }} vscode
+   */
+  function dispatchMessages(iframe, vscode) {
+    window.addEventListener('message', handleMessage);
+
+    /** @param {MessageEvent} evt */
+    async function handleMessage(evt) {
+      if (evt.source === iframe.contentWindow) {
+        console.log('webPreviewer:runWebViewProxy: Received message from iframe:', evt.data);
+        vscode.postMessage(evt.data);
+      } else if (evt.source === window.parent || evt.source?.['origin'] === window.origin) {
+        const messageToIframe = { ...evt.data };
+        if (messageToIframe.execute && typeof messageToIframe.execute === 'object' && !messageToIframe.execute.origin) {
+          messageToIframe.execute.origin = window.origin;
+        }
+        const remoteAgentOrigin = new URL(iframe.src).origin;
+        console.log('webPreviewer:runWebViewProxy: Forwarding message to iframe:', evt.data, '-->', messageToIframe);
+        iframe.contentWindow?.postMessage(messageToIframe, remoteAgentOrigin);
+      }
+    }
   }
 
 } webPreviewer() // </script>
