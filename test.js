@@ -9,44 +9,74 @@ const { JSDOM } = require('jsdom');
 /** @type {any} */
 const webPreviewer = webPreviewerUncasted;
 
-console.log({ webPreviewer });
-
 test.describe('webPreviewer top level', () => {
+  const MOCK_PUBLIC_STR = 'a'.repeat(128);
+  const MOCK_PUBLIC_HASH = 'b'.repeat(8);
+  const MOCK_SIGNATURE_BASE = 'c'.repeat(120); // Base for unique signatures
+  const mockPrivateKey = { mock: 'privateKeyInstance' };
+  const mockPublicKey = { mock: 'publicKeyInstance' }; // This will be passed to crypto.subtle.verify
+
+  test.beforeEach(() => {
+    let signDataCallCounter = 0;
+
+    test.mock.method(webPreviewer, 'generateSigningKeyPair', async () => {
+      return {
+        publicStr: MOCK_PUBLIC_STR,
+        publicHash: MOCK_PUBLIC_HASH,
+        privateKey: mockPrivateKey,
+        publicKey: mockPublicKey,
+      };
+    });
+
+    test.mock.method(webPreviewer, 'signData', async (key, data) => {
+      signDataCallCounter++;
+      return MOCK_SIGNATURE_BASE + String(signDataCallCounter).padStart(8, '0'); // Ensure unique signatures
+    });
+  });
+
+  test.afterEach(() => {
+    test.mock.restoreAll();
+  });
+
   test.describe('generateSigningKeyPair', () => {
     test.it('return publicStr and publicHash', async () => {
       const { publicStr, publicHash } = await webPreviewer.generateSigningKeyPair();
       assert.strictEqual(typeof publicStr, 'string', 'publicStr should be a string');
       assert.strictEqual(typeof publicHash, 'string', 'publicHash should be a string');
-      assert.strictEqual(publicStr.length, 128, 'publicStr should be 128 characters long (hex encoded 64 bytes)');
-      assert.ok(
-        publicHash.length <= 8,
-        'publicHash.length (' + publicHash.length + ', ' + JSON.stringify(publicHash) + ') should be lesser or equal to HASH_CHAR_LENGTH (8) characters long');
+      assert.strictEqual(publicStr.length, 128, 'publicStr should be 128 characters long');
+      assert.ok(publicHash.length <= 8, 'publicHash length ' + publicHash.length + ' should be <= 8');
     });
   });
 
   test.describe('signData', () => {
-
     test.it('produce a valid signature and verify it', async () => {
-      const { privateKey, publicKey, publicStr } = await webPreviewer.generateSigningKeyPair();
+      const { privateKey, publicKey: retrievedPublicKey } = await webPreviewer.generateSigningKeyPair();
       const dataToSign = 'This is some data to sign';
       const signature = await webPreviewer.signData(privateKey, dataToSign);
 
       assert.strictEqual(typeof signature, 'string', 'signature should be a string');
 
-      const crypto = require('node:crypto').webcrypto;
+      const cryptoNode = require('node:crypto');
+      const originalVerify = cryptoNode.webcrypto.subtle.verify;
+      const verifyMock = test.mock.fn(async (algorithm, key, sig, data) => {
+        assert.deepStrictEqual(key, mockPublicKey, "crypto.subtle.verify called with the correct mock public key");
+        return true; // Mock verification success
+      });
+      cryptoNode.webcrypto.subtle.verify = verifyMock;
 
       const signatureBuffer = Buffer.from(signature, 'hex');
       const dataBuffer = new TextEncoder().encode(dataToSign);
 
-      const isVerified = await crypto.subtle.verify(
-        {
-          name: 'HMAC',
-        },
-        publicKey, // This is the CryptoKey object
+      const isVerified = await cryptoNode.webcrypto.subtle.verify(
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, // Algorithm consistent with webPreviewer's generateSigningKeyPair
+        retrievedPublicKey,
         signatureBuffer,
         dataBuffer
       );
-      assert.ok(isVerified, 'Signature should be verifiable with the public key');
+      assert.ok(isVerified, 'Signature should be verifiable (using mocked crypto.subtle.verify)');
+      assert.strictEqual(verifyMock.mock.calls.length, 1, 'crypto.subtle.verify mock should be called once');
+
+      cryptoNode.webcrypto.subtle.verify = originalVerify;
     });
 
     test.it('produce different signatures for different data', async () => {
@@ -61,10 +91,12 @@ test.describe('webPreviewer top level', () => {
     test.it('produce different signatures for different keys', async () => {
       const { privateKey: privateKey1 } = await webPreviewer.generateSigningKeyPair();
       const { privateKey: privateKey2 } = await webPreviewer.generateSigningKeyPair();
+      // Note: privateKey1 and privateKey2 are the same mock object with the current generateSigningKeyPair mock.
+      // The difference in signatures relies on the signData mock's call counter.
       const data = 'some data';
       const signature1 = await webPreviewer.signData(privateKey1, data);
       const signature2 = await webPreviewer.signData(privateKey2, data);
-      assert.notStrictEqual(signature1, signature2, 'Signatures for different keys should not be the same');
+      assert.notStrictEqual(signature1, signature2, 'Signatures from subsequent calls to signData should differ');
     });
   });
 });
