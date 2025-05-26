@@ -186,11 +186,11 @@ function webPreviewer(environment) {
             commandLine = "";
 
             if (currentCommand) {
+              console.log('webPreviewer:runExtension: Executing command:', currentCommand);
               try {
-                if (!workerIframeReadyPromise) {
-                    writeEmitter.fire('Error: Worker iframe not initialized. Please try opening the "Web Previewer Runtime" view or reopening the terminal.\r\n> ');
-                    return;
-                }
+                if (!workerIframeReadyPromise)
+                  await ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
+
                 const proxyWebview = await workerIframeReadyPromise; 
                 if (!proxyWebview) {
                   throw new Error("Proxy webview not available after promise resolution.");
@@ -446,6 +446,7 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
     async function init() {
       try {
         const iframe = await createIFRAME({ src: url });
+        console.log('webPreviewer:runWebViewProxy: Created remote agent iframe:', iframe);
         dispatchMessages(iframe);
         vscode.postMessage({ command: 'workerIframeReady' });
       } catch (error) {
@@ -461,13 +462,15 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
       /** @param {MessageEvent} evt */
       async function handleMessage(evt) {
         if (evt.source === iframe.contentWindow) {
+          console.log('webPreviewer:runWebViewProxy: Received message from iframe:', evt.data); 
           vscode.postMessage(evt.data);
-        } else if (evt.source === window.parent) {
+        } else if (evt.source === window.parent || evt.source?.['origin'] === window.origin) {
           const messageToIframe = { ...evt.data };
           if (messageToIframe.execute && typeof messageToIframe.execute === 'object' && !messageToIframe.execute.origin) {
             messageToIframe.execute.origin = window.origin;
           }
           const remoteAgentOrigin = new URL(iframe.src).origin;
+          console.log('webPreviewer:runWebViewProxy: Forwarding message to iframe:', evt.data, '-->', messageToIframe);
           iframe.contentWindow?.postMessage(messageToIframe, remoteAgentOrigin);
         }
       }
@@ -537,24 +540,28 @@ webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
 
   async function generateSigningKeyPair(cryptoOverride) {
     const useCrypto = cryptoOverride || getCrypto();
-    const algorithm = { name: "HMAC", hash: "SHA-256" };
-    const key = /** @type {CryptoKey} */ (await useCrypto.subtle.generateKey(algorithm, true, ["sign", "verify"]));
-    const rawKeyBuffer = await useCrypto.subtle.exportKey('raw', key);
-    const publicStr = Array.from(new Uint8Array(rawKeyBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const keyDigest = await useCrypto.subtle.digest('SHA-256', rawKeyBuffer);
-    let tempPublicHash = Math.abs(new Uint32Array(keyDigest)[0]).toString(36);
-    while(tempPublicHash.length < HASH_CHAR_LENGTH) {
-        tempPublicHash = '0' + tempPublicHash;
-    }
-    const publicHash = tempPublicHash.slice(-HASH_CHAR_LENGTH);
-    return { publicStr, publicHash, privateKey: key, publicKey: key };
+    const algorithm = {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    };
+    const keyPair = await useCrypto.subtle.generateKey(algorithm, true, ["sign", "verify"]);
+
+    const publicKeySpki = await useCrypto.subtle.exportKey('spki', keyPair.publicKey);
+    const publicStr = btoa(String.fromCharCode.apply(null, new Uint8Array(publicKeySpki)));
+
+    const publicKeyDigest = await useCrypto.subtle.digest('SHA-256', publicKeySpki);
+    const publicHash = [...new Uint8Array(publicKeyDigest)].map(b => b.toString(36)).join('').slice(0, HASH_CHAR_LENGTH);
+
+    return { publicStr, publicHash, privateKey: keyPair.privateKey };
   }
 
-  async function signData(privateKey, str, cryptoOverride) {
+  function signData(privateKey, str, cryptoOverride) {
     const useCrypto = cryptoOverride || getCrypto();
-    const signatureBuffer = await useCrypto.subtle.sign({ name: "HMAC" }, privateKey, new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return useCrypto.subtle.sign({ name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, privateKey, new TextEncoder().encode(str));
   }
+
 
   /** @param {{ src: string, cssText?: string }} params */
   function createIFRAME({ src, cssText }) {
