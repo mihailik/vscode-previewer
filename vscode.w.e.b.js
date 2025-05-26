@@ -58,8 +58,15 @@ function webPreviewer(environment) {
       activate,
       deactivate,
       runExtension: { 
+        createJsReplPty,
+        previewDocumentAsHtml,
+        openDocumentOrUriAsHtml,
+        openUriAsHtml,
+        openDocumentAsHtml,
+        showInPanel,
+        ensureRuntimeFrameViewIsResolvedAndLoadsIframe,
         resolveWebviewView,
-        createWorkerIframeReadyPromise,
+        createWorkerIframeReadyPromise
       }
     });
 
