@@ -242,15 +242,15 @@ function webPreviewer(environment) {
     }
 
     async function previewDocumentAsHtml(documentOrUri) {
-      try {
-        console.log('webPreviewer:runExtension:previewDocumentAsHtml: Ensuring worker iframe is ready...');
-        await ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
-        console.log('webPreviewer:runExtension:previewDocumentAsHtml: Worker iframe should be ready.');
-      } catch (e) {
-        console.error("Failed to ensure worker iframe for preview:", e);
-        vscode.window.showErrorMessage("Background worker iframe failed to load. Preview might not work correctly.");
-        workerIframeReadyPromise = null;
-      }
+      // try {
+      //   console.log('webPreviewer:runExtension:previewDocumentAsHtml: Ensuring worker iframe is ready...');
+      //   await ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
+      //   console.log('webPreviewer:runExtension:previewDocumentAsHtml: Worker iframe should be ready.');
+      // } catch (e) {
+      //   console.error("Failed to ensure worker iframe for preview:", e);
+      //   vscode.window.showErrorMessage("Background worker iframe failed to load. Preview might not work correctly.");
+      //   workerIframeReadyPromise = null;
+      // }
       openDocumentOrUriAsHtml(documentOrUri);
     }
 
@@ -296,10 +296,15 @@ function webPreviewer(environment) {
         panel.onDidDispose(() => {
           delete documentPanels[document.uri];
         });
+
+        panel.webview.onDidReceiveMessage(handleWebViewMessage);
       }
 
       showInPanel(document, panel);
       if (!panel.visible) panel.reveal();
+    }
+
+    function handleWebViewMessage(msg) {
     }
 
     /**

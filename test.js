@@ -239,64 +239,93 @@ test.describe('webPreviewer runExtension', () => {
       assert.ok(mockContext.subscriptions.length > 0, 'Subscriptions should be added');
     });
 
-    test.it('previewDocumentAsHtml command execution flow with overridden vscode', async () => {
+    test.it('previewDocumentAsHtml command should create and show webview panel for the document', async () => {
       const previewCommandCall = mockVscode.commands.registerCommand.mock.calls.find(call => call.arguments[0] === 'web-previewer.previewDocumentAsHtml');
       assert.ok(previewCommandCall, "previewDocumentAsHtml command should be registered");
       const previewCommandCallback = previewCommandCall.arguments[1];
-      
       const mockDocUri = mockVscode.Uri.file('/test.html');
-      
-      const currentReadyPromise = createWorkerIframeReadyPromise();
-      let promiseResolved = false;
-      currentReadyPromise.then(() => { promiseResolved = true; });
 
-      mockVscode.commands.executeCommand.mock.mockImplementation(async (commandId) => {
-        if (commandId === 'web-previewer.runtimeFrameView.focus') {
-          /** @type {((message: {command: string, [key: string]: any}) => Promise<void>) | null} */
-          let storedMessageHandler = null;
-
-          const tempMockWebview = {
-            options: {}, html: '', cspSource: 'mockCspSource',
-            onDidReceiveMessage: test.mock.fn((handler) => {
-              storedMessageHandler = handler;
-              return { dispose: test.mock.fn() };
-            }),
-            onDidDispose: test.mock.fn((cb) => ({ dispose: test.mock.fn() })),
-            asWebviewUri: test.mock.fn(uri => uri), postMessage: test.mock.fn(),
-          };
-          const tempMockWebviewView = {
-            webview: tempMockWebview, 
-            onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
-            show: test.mock.fn(), 
-            visible: true,
-          };
-          
-          if (resolveWebviewView && typeof resolveWebviewView === 'function') {
-            resolveWebviewView(tempMockWebviewView, {}, null);
-          } else {
-            console.error("resolveWebviewView is not available or not a function in test");
-            throw new Error("resolveWebviewView not available for test setup");
-          }
-          
-          // tempMockWebview.onDidReceiveMessage would have been called by resolveWebviewView
-          // and storedMessageHandler should now be set.
-          if (typeof storedMessageHandler === 'function') {
-            // @ts-ignore storedMessageHandler could be null here, but the check above should prevent it
-            setImmediate(() => storedMessageHandler({ command: 'workerIframeReady' }));
-          } else {
-            console.error("previewDocumentAsHtml test: messageHandler was not stored or is not a function.", { handler: storedMessageHandler });
-          }
-        }
-        return Promise.resolve();
+      /** @type {any} */
+      let capturedPanel;
+      mockVscode.window.createWebviewPanel = test.mock.fn((viewType, title, column, options) => {
+        const panel = {
+          webview: {
+            html: '',
+            options: {},
+            onDidReceiveMessage: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+            asWebviewUri: test.mock.fn(uri => uri),
+            cspSource: 'mock-csp-source',
+          },
+          reveal: test.mock.fn(),
+          onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+          visible: false,
+          title: '',
+          dispose: test.mock.fn(),
+        };
+        capturedPanel = panel;
+        return panel;
       });
 
       await previewCommandCallback(mockDocUri);
-      
-      await new Promise(resolve => setImmediate(resolve));
 
-      assert.ok(promiseResolved, "workerIframeReadyPromise should have resolved after command execution");
-      assert.ok(mockVscode.commands.executeCommand.mock.calls.some(call => call.arguments[0] === 'web-previewer.runtimeFrameView.focus'));
+      assert.ok(mockVscode.window.createWebviewPanel.mock.calls.length >= 1, 'createWebviewPanel should be called');
+      assert.ok(capturedPanel, 'Panel should be captured');
+      assert.ok(capturedPanel.reveal.mock.calls.length >= 1, 'panel.reveal() should be called');
+      assert.ok(capturedPanel.webview.html.includes('webPreviewer('), 'Panel HTML should be set with webPreviewer script');
       assert.strictEqual(mockVscode.window.showErrorMessage.mock.calls.length, 0, "showErrorMessage should not have been called");
+    });
+
+    test.it('ensureRuntimeFrameViewIsResolvedAndLoadsIframe should resolve its promise on view focus and ready message', async () => {
+      // activate() has run from the describe.beforeEach, so providers are registered.
+      const runtimeFrameViewProviderCall = mockVscode.window.registerWebviewViewProvider.mock.calls.find(call => call.arguments[0] === 'web-previewer.runtimeFrameView');
+      assert.ok(runtimeFrameViewProviderCall, 'WebviewViewProvider for runtimeFrameView should be registered by activate');
+      const actualResolveWebviewView = runtimeFrameViewProviderCall.arguments[1].resolveWebviewView;
+      assert.ok(typeof actualResolveWebviewView === 'function', 'resolveWebviewView function should be available from provider registration');
+
+      let capturedMessageHandler;
+      const tempMockWebviewView = {
+        webview: {
+          options: {}, html: '', cspSource: 'mockCspSource',
+          onDidReceiveMessage: test.mock.fn((handler) => {
+            capturedMessageHandler = handler;
+            return { dispose: test.mock.fn() };
+          }),
+          onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+          asWebviewUri: test.mock.fn(uri => uri), postMessage: test.mock.fn(),
+        },
+        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })),
+        show: test.mock.fn(), visible: true,
+      };
+
+      mockVscode.commands.executeCommand = test.mock.fn(async (commandId) => {
+        if (commandId === 'web-previewer.runtimeFrameView.focus') {
+          await actualResolveWebviewView(tempMockWebviewView, {}, null);
+          if (capturedMessageHandler) {
+            setImmediate(() => capturedMessageHandler({ command: 'workerIframeReady' }));
+          } else {
+            console.error("Test Error: Message handler not captured in executeCommand mock for .focus");
+            throw new Error("Message handler not captured for .focus");
+          }
+          return Promise.resolve();
+        }
+        // For any other command, if the original mock had a default behavior,
+        // we might need to replicate it or ensure it's covered by the per-test mockVscode setup.
+        // Given mockVscode.commands.executeCommand is initialized to test.mock.fn(() => Promise.resolve()),
+        // we can just return that for other commands.
+        return Promise.resolve();
+      });
+      
+      const ensureRuntimeFrameViewIsResolvedAndLoadsIframe = freshWebPreviewerModule.runExtension.ensureRuntimeFrameViewIsResolvedAndLoadsIframe;
+      assert.ok(typeof ensureRuntimeFrameViewIsResolvedAndLoadsIframe === 'function', 'ensureRuntimeFrameViewIsResolvedAndLoadsIframe should be a function');
+
+      const readyPromise = ensureRuntimeFrameViewIsResolvedAndLoadsIframe();
+
+      await assert.doesNotReject(readyPromise, 'workerIframeReadyPromise from ensureRuntimeFrameView... should resolve');
+      assert.ok(
+        mockVscode.commands.executeCommand.mock.calls.some(call => call.arguments[0] === 'web-previewer.runtimeFrameView.focus'),
+        'executeCommand with web-previewer.runtimeFrameView.focus should be called'
+      );
+      assert.ok(capturedMessageHandler, "Message handler should have been captured by resolveWebviewView simulation");
     });
   });
 
