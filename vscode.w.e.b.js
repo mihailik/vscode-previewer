@@ -76,6 +76,8 @@ function webPreviewer(environment) {
 
     /** @type {import('vscode')} */
     let vscode;
+    /** @type {typeof window.crypto | undefined} */
+    let crypto;
     const webPreviewerStr = 'web-previewer';
     const runtimeFrameViewId = webPreviewerStr + '.runtimeFrameView';
     const documentPanels = {};
@@ -87,7 +89,7 @@ function webPreviewer(environment) {
      * @param {import('vscode').ExtensionContext & {
      *  overrides?: {
      *    vscode?: typeof import('vscode'),
-     *    crypto?: typeof crypto
+     *    crypto?: typeof window.crypto
      *  }
      * }} context 
      */
@@ -95,8 +97,8 @@ function webPreviewer(environment) {
       console.log('webPreviewer:runExtension:activate');
 
       vscode = context?.overrides?.vscode || require('vscode');
-      const currentCrypto = context?.overrides?.crypto || crypto;
-      const keys = await generateSigningKeyPair(currentCrypto);
+      crypto = context?.overrides?.crypto;
+      const keys = await generateSigningKeyPair(crypto);
       publicStr = keys.publicStr;
       publicHash = keys.publicHash;
       privateKey = keys.privateKey;
@@ -382,7 +384,7 @@ webPreviewerFn("proxy:" + ${JSON.stringify(JSON.stringify(iframeSrc))});
           // After init, send the script to set up the remoteAgent
           const remoteAgentSetupTag = 'webPreviewer:runExtension:remoteAgentSetup:' + (Date.now() + Math.random()).toString(36);
           const scriptToRunInRemote = String(webPreviewer) + '\nwebPreviewer("remoteAgent");';
-          const signature = await signData(privateKey, scriptToRunInRemote);
+          const signature = await signData(privateKey, scriptToRunInRemote, crypto);
 
           webviewView.webview.postMessage({
             tag: remoteAgentSetupTag,
@@ -529,9 +531,12 @@ webPreviewerFn("proxy:" + ${JSON.stringify(JSON.stringify(iframeSrc))});
     console.log('webPreviewer:runRemoteAgent: evalWebPreviewer is now on global scope.');
   }
 
+  function getCrypto() {
+    return crypto;
+  }
 
   async function generateSigningKeyPair(cryptoOverride) {
-    const useCrypto = cryptoOverride || crypto;
+    const useCrypto = cryptoOverride || getCrypto();
     const algorithm = { name: "HMAC", hash: "SHA-256" };
     const key = /** @type {CryptoKey} */ (await useCrypto.subtle.generateKey(algorithm, true, ["sign", "verify"]));
     const rawKeyBuffer = await useCrypto.subtle.exportKey('raw', key);
@@ -546,7 +551,7 @@ webPreviewerFn("proxy:" + ${JSON.stringify(JSON.stringify(iframeSrc))});
   }
 
   async function signData(privateKey, str, cryptoOverride) {
-    const useCrypto = cryptoOverride || crypto;
+    const useCrypto = cryptoOverride || getCrypto();
     const signatureBuffer = await useCrypto.subtle.sign({ name: "HMAC" }, privateKey, new TextEncoder().encode(str));
     return Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }

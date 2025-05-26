@@ -136,14 +136,10 @@ test.describe('webPreviewer runExtension', () => {
       TerminalProfile: test.mock.fn(options => options),
     };
 
-    // Since vscode.w.e.b.js might still use `require('vscode')` internally for other functions
-    // NOT directly called by activate (if any), we keep this for broader compatibility for now.
-    // However, for `activate` itself, the override will be used.
     const Module = require('module');
     const originalRequire = Module.prototype.require;
     Module.prototype.require = function (id) {
       if (id === 'vscode') {
-        // console.log('Test mock: require("vscode") intercepted');
         return mockVscode;
       }
       return originalRequire.apply(this, arguments);
@@ -171,8 +167,7 @@ test.describe('webPreviewer runExtension', () => {
       resolveWebviewView = () => { throw new Error("resolveWebviewView not loaded from module"); };
       createWorkerIframeReadyPromise = () => { throw new Error("createWorkerIframeReadyPromise not loaded from module"); return Promise.reject(new Error("createWorkerIframeReadyPromise not loaded")); };
     }
-    // Restore original require after module is loaded and functions are extracted.
-    Module.prototype.require = originalRequire; 
+    Module.prototype.require = originalRequire;
   });
 
   test.afterEach(() => {
@@ -188,9 +183,8 @@ test.describe('webPreviewer runExtension', () => {
         extensionUri: mockVscode.Uri.file('/mock/extension/path/activate-test'),
         globalState: { get: test.mock.fn(), update: test.mock.fn() },
         workspaceState: { get: test.mock.fn(), update: test.mock.fn() },
-        overrides: { vscode: mockVscode } // Pass mockVscode here
+        overrides: { vscode: mockVscode }
       };
-      // Reset calls for this specific test suite
       mockVscode.commands.registerCommand.mock.resetCalls();
       mockVscode.window.registerTerminalProfileProvider.mock.resetCalls();
       mockVscode.window.registerWebviewViewProvider.mock.resetCalls();
@@ -198,7 +192,6 @@ test.describe('webPreviewer runExtension', () => {
       mockVscode.commands.executeCommand.mock.resetCalls();
       mockVscode.window.showErrorMessage.mock.resetCalls();
 
-      // Call activate here, so it uses the overridden vscode from mockContext
       if (activate && typeof activate === 'function') {
         await activate(mockContext);
       } else {
@@ -271,7 +264,6 @@ test.describe('webPreviewer runExtension', () => {
 
       assert.ok(promiseResolved, "workerIframeReadyPromise should have resolved after command execution");
       assert.ok(mockVscode.commands.executeCommand.mock.calls.some(call => call.arguments[0] === 'web-previewer.runtimeFrameView.focus'));
-      // Ensure error message was not shown
       assert.strictEqual(mockVscode.window.showErrorMessage.mock.calls.length, 0, "showErrorMessage should not have been called");
     });
   });
@@ -280,40 +272,53 @@ test.describe('webPreviewer runExtension', () => {
     let mockWebviewView;
     let mockWebview;
     let mockContext;
-    let capturedWebviewViewOnDidDisposeCallback = null; // Renamed for clarity
+    let mockCrypto;
+    let capturedWebviewViewOnDidDisposeCallback = null;
 
     test.beforeEach(() => {
       // This beforeEach for 'resolveWebviewView' runs AFTER the main beforeEach.
       // So, freshWebPreviewerModule and its functions (like generateSigningKeyPair mock) are set up.
       // The publicHash used by resolveWebviewView should be MOCK_PUBLIC_HASH.
 
-      capturedWebviewViewOnDidDisposeCallback = null; // Reset before each test
+      capturedWebviewViewOnDidDisposeCallback = null;
       mockWebview = {
         options: {},
         html: '',
         cspSource: 'mockCspSourceValue',
         onDidReceiveMessage: test.mock.fn(() => ({ dispose: test.mock.fn() })),
         // This onDidDispose is for the webview content itself, not what the code currently calls for promise cleanup
-        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })), 
+        onDidDispose: test.mock.fn(() => ({ dispose: test.mock.fn() })),
         asWebviewUri: test.mock.fn(uri => uri),
         postMessage: test.mock.fn(),
       };
       mockWebviewView = {
         webview: mockWebview,
         // This is the onDidDispose that resolveWebviewView actually subscribes to
-        onDidDispose: test.mock.fn((callback) => { 
-          capturedWebviewViewOnDidDisposeCallback = callback; // Capture this callback
+        onDidDispose: test.mock.fn((callback) => {
+          capturedWebviewViewOnDidDisposeCallback = callback;
           return { dispose: test.mock.fn() };
-        }), 
+        }),
         show: test.mock.fn(),
         visible: true,
+      };
+      mockCrypto = {
+        subtle: {
+          generateKey: () => /** @type {*} */({ __key: 'mock1' }),
+          exportKey: /** @type {*} */(() => new TextEncoder().encode('mock2')),
+          // the part to emulate the publicHash of tso86l
+          digest: /** @type {*} */(() => (new TextEncoder().encode('mock3_12')).buffer),
+          sign: /** @type {*} */(() => new TextEncoder().encode('mock4')),
+        }
       };
       mockContext = {
         subscriptions: [],
         extensionUri: mockVscode.Uri.file('/mock/extension/path/activate-test'),
         globalState: { get: test.mock.fn(), update: test.mock.fn() },
         workspaceState: { get: test.mock.fn(), update: test.mock.fn() },
-        overrides: { vscode: mockVscode } // Pass mockVscode here
+        overrides: {
+          vscode: mockVscode,
+          crypto: mockCrypto
+        }
       };
     });
 
@@ -322,10 +327,11 @@ test.describe('webPreviewer runExtension', () => {
       assert.ok(resolveWebviewView, "resolveWebviewView should be loaded");
       resolveWebviewView(mockWebviewView, {}, null);
       assert.strictEqual(mockWebview.options.enableScripts, true);
-      assert.ok(mockWebview.html.includes('PROXY IFRAME')); // Changed from 'Worker Iframe Host'
+      assert.ok(mockWebview.html.includes('PROXY IFRAME'));
     });
 
     test.it('should handle workerIframeReady message and resolve promise', async () => {
+      await activate(mockContext);
       resolveWebviewView(mockWebviewView, {}, null);
       const readyPromise = createWorkerIframeReadyPromise();
       const onDidReceiveMessageCallback = mockWebview.onDidReceiveMessage.mock.calls[0].arguments[0];
@@ -354,13 +360,15 @@ test.describe('webPreviewer runExtension', () => {
     });
 
     test.it('onDidDispose should clear promise state, allowing new promise creation and resolution/rejection', async () => {
+      await activate(mockContext);
+   
       const promise_before_disposal = createWorkerIframeReadyPromise();
       
       resolveWebviewView(mockWebviewView, {}, null);
       // Check that the callback from webviewView.onDidDispose was captured
       assert.ok(typeof capturedWebviewViewOnDidDisposeCallback === 'function', 'webviewView.onDidDispose callback should have been captured');
 
-      capturedWebviewViewOnDidDisposeCallback(); // Call the captured callback
+      capturedWebviewViewOnDidDisposeCallback();
 
       const promise_after_dispose1 = createWorkerIframeReadyPromise();
       assert.ok(promise_after_dispose1, 'New promise should be creatable after disposal');
@@ -375,7 +383,7 @@ test.describe('webPreviewer runExtension', () => {
 
       // Check again if the callback is still considered a function (it should be, it's the same mock)
       assert.ok(typeof capturedWebviewViewOnDidDisposeCallback === 'function', 'webviewView.onDidDispose callback should still be valid for a second call');
-      capturedWebviewViewOnDidDisposeCallback(); // Call it again
+      capturedWebviewViewOnDidDisposeCallback();
 
       const promise_after_dispose2 = createWorkerIframeReadyPromise();
       assert.ok(promise_after_dispose2, 'Another new promise should be creatable after second disposal');
