@@ -361,7 +361,7 @@ webPreviewer();
 <h2>PROXY IFRAME</h2>
 <${'script'}>
 const webPreviewerFn = ${String(webPreviewer)};
-webPreviewerFn("proxy:" + ${JSON.stringify(JSON.stringify(iframeSrc))});
+webPreviewerFn("proxy:" + ${JSON.stringify(iframeSrc)});
 </${'script'}>`;
 
       webviewView.webview.onDidReceiveMessage(handleProxyMessage);
