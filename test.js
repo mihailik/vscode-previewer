@@ -4,7 +4,6 @@
 const webPreviewerUncasted = require('./vscode.w.e.b');
 const test = require('node:test');
 const assert = require('node:assert');
-const { JSDOM } = require('jsdom');
 
 /** @type {any} */
 const webPreviewer = webPreviewerUncasted;

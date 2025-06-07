@@ -89,7 +89,6 @@
     "@types/node": "^22.15.18",
     "@types/vscode": "^1.91.0",
     "@vscode/test-web": "^0.0.69",
-    "@vscode/vsce": "^3.4.0",
-    "jsdom": "^26.1.0"
+    "@vscode/vsce": "^3.4.0"
   }
 }
